@@ -1,0 +1,107 @@
+{
+  "name": "dsh-openai-auth",
+  "version": "0.2.3",
+  "description": "Use your local Codex ChatGPT login in DeepSeek Harness Desktop",
+  "type": "module",
+  "license": "MIT",
+  "main": "./src/index.js",
+  "author": "solstice621",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/solstice621/dsh-openai-auth.git"
+  },
+  "homepage": "https://github.com/solstice621/dsh-openai-auth#readme",
+  "bugs": {
+    "url": "https://github.com/solstice621/dsh-openai-auth/issues"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "codex",
+    "openai",
+    "oauth",
+    "chatgpt",
+    "desktop"
+  ],
+  "icon": "./icon.svg",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./src/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "src",
+    "locale",
+    "icon.svg",
+    "docs/screenshots",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4",
+    "@deepseek-ai/schemastery": "~3.18.4",
+    "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm-pi-ai": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-http-proxy": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-connection": "0.2.0-rc.2",
+    "@earendil-works/pi-ai": "0.87.1"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "external": [
+        "react"
+      ],
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-settings-general"
+      ]
+    }
+  },
+  "disclosure": {
+    "cloud": true,
+    "network": [
+      "https://auth.openai.com",
+      "https://chatgpt.com"
+    ],
+    "offlineMode": false,
+    "apiKeys": [],
+    "credentials": {
+      "type": "Codex-managed ChatGPT OAuth",
+      "storage": "Local Codex auth.json",
+      "logged": false,
+      "uiReceivesTokens": false
+    },
+    "permissions": {
+      "filesystemRead": [
+        "Configured CODEX_HOME/auth.json"
+      ],
+      "filesystemWrite": [
+        "Harness native connection preference; official Codex CLI owns login-cache updates"
+      ],
+      "process": [
+        "Configured official Codex app-server",
+        "macOS scutil --proxy"
+      ],
+      "network": [
+        "OpenAI sign-in, subscription inference and quota reads"
+      ]
+    },
+    "retention": "session",
+    "jurisdiction": []
+  }
+}

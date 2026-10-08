@@ -1,0 +1,3 @@
+- insert:
+    - id: dsh-openai-auth
+      name: dsh-openai-auth
