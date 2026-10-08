@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+- Show the last successful quota reading immediately when the settings page opens, then refresh it behind the user instead of leaving the card empty while the Codex app-server starts.
+- Persist a sanitized, account-scoped rate-limit snapshot; a snapshot belonging to another account is never reused.
+- Label a restored reading as `上次更新` and keep it on screen when a refresh fails, with the failure reported beside it rather than replacing the numbers.
+- Add `quotaCachePath` and a `cached` RPC that answers from disk without starting Codex.
+
 ## 0.3.0
 
 - Discover models through official Codex app-server model/list at startup and every six hours by default.

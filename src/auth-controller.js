@@ -1,5 +1,6 @@
 import { CodexAppServer } from './app-server.js';
 import { CodexAuthError } from './codex-auth.js';
+import { accountKey } from './quota-cache.js';
 import { createHash } from 'node:crypto';
 
 export function normalizeQuota(result, expectedAccountId) {
@@ -20,8 +21,8 @@ export function normalizeQuota(result, expectedAccountId) {
 }
 
 export class AuthController {
-  constructor({ source, enabled = true, beforeAuth, childEnvironment, modelSync, createServer = options => new CodexAppServer(options), now = Date.now }) {
-    Object.assign(this, { source, enabled, beforeAuth, childEnvironment, modelSync, createServer, now });
+  constructor({ source, enabled = true, beforeAuth, childEnvironment, modelSync, quotaStore, createServer = options => new CodexAppServer(options), now = Date.now }) {
+    Object.assign(this, { source, enabled, beforeAuth, childEnvironment, modelSync, quotaStore, createServer, now });
   }
 
   async getState() {
@@ -81,8 +82,26 @@ export class AuthController {
       const result = await server.request('account/rateLimits/read');
       const after = await this.source.read();
       if (before.account.id !== after.account.id) throw new CodexAuthError('账号已变化，请重新读取额度。', 'CODEX_ACCOUNT_CHANGED');
-      return { buckets: normalizeQuota(result, after.account.id), fetchedAt: this.now() };
+      const value = { buckets: normalizeQuota(result, after.account.id), fetchedAt: this.now() };
+      // Remember it for the next page load; a failed write never fails the read.
+      try { await this.quotaStore?.write({ version: 1, accountKey: accountKey(after.account.id), ...value }); } catch { /* cache only */ }
+      return value;
     } finally { server.close(); this.servers.delete(server); }
+  }
+
+  /**
+   * The last successful read for the currently signed-in account. Reads one
+   * small file and never starts the Codex app-server, so the settings page can
+   * paint the previous quota immediately and refresh behind it.
+   */
+  async cachedQuota() {
+    if (!this.quotaStore) return null;
+    let auth;
+    try { auth = await this.source.read(); } catch { return null; }
+    const cached = await this.quotaStore.read();
+    // Another account's snapshot is not this account's quota.
+    if (!cached || cached.accountKey !== accountKey(auth.account.id)) return null;
+    return { buckets: cached.buckets, fetchedAt: cached.fetchedAt, cached: true };
   }
 
   async startLogin() {
@@ -144,7 +163,7 @@ export class AuthController {
 }
 
 export function authRpcHandler(controller) {
-  const methods = new Map([['state', () => controller.getState()], ['refresh', () => controller.refresh()], ['quota', () => controller.quota()], ['login', () => controller.startLogin()], ['cancel', () => controller.cancelLogin()], ['models', () => controller.refreshModels()]]);
+  const methods = new Map([['state', () => controller.getState()], ['refresh', () => controller.refresh()], ['quota', () => controller.quota()], ['cached', () => controller.cachedQuota()], ['login', () => controller.startLogin()], ['cancel', () => controller.cancelLogin()], ['models', () => controller.refreshModels()]]);
   return async (endpoint, payload) => {
     if (!methods.has(endpoint) || payload === null || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).length) {
       return { ok: false, error: { code: 'CODEX_BAD_REQUEST', message: '无法识别的授权操作。', details: {} } };

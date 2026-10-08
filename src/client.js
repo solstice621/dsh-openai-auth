@@ -69,14 +69,32 @@ window.__ModuleLoader__.load({
       }
       async function loadQuota() {
         if (active.current) { setBusy('quota'); setQuotaError(null); }
+        // A cached reading stays on screen while the refresh runs; only a failure
+        // with nothing to show falls back to the placeholder text.
         try { const value = await call('quota'); if (active.current) setQuota(value); }
-        catch (err) { if (active.current) { setQuota(null); setQuotaError(errors[err.code] ?? '额度读取失败，请检查网络后重试。'); } }
+        catch (err) { if (active.current) setQuotaError(errors[err.code] ?? '额度读取失败，请检查网络后重试。'); }
         finally { if (active.current) setBusy(null); }
+      }
+      // Paint the previous reading first, then refresh it behind the user.
+      async function showCachedQuota() {
+        try {
+          const value = await call('cached');
+          if (!active.current || !value?.buckets?.length) return false;
+          setQuota(value);
+          return true;
+        } catch { return false; }
       }
       async function sync() { const value = await call('state'); accept(value); return value; }
       React.useEffect(() => {
         active.current = true;
-        sync().then(value => { if (value.connected && value.enabled && active.current) loadQuota(); else if (active.current) setBusy(null); }).catch(() => { if (active.current) { setError('无法读取授权状态，请重试或重启 Harness。'); setBusy(null); } });
+        sync().then(async value => {
+          if (!active.current) return;
+          if (!value.connected || !value.enabled) { setBusy(null); return; }
+          const painted = await showCachedQuota();
+          if (!active.current) return;
+          if (!painted) setBusy('quota');
+          await loadQuota();
+        }).catch(() => { if (active.current) { setError('无法读取授权状态，请重试或重启 Harness。'); setBusy(null); } });
         const focus = () => { sync().catch(() => {}); };
         window.addEventListener('focus', focus);
         return () => { active.current = false; window.removeEventListener('focus', focus); };
@@ -162,7 +180,10 @@ window.__ModuleLoader__.load({
           quota?.buckets?.length ? quota.buckets.map(bucket => h('div', { className: 'bucket', key: bucket.id },
             quota.buckets.length > 1 && h('p', { className: 'small muted' }, bucket.name),
             h('div', { className: 'quota-grid' }, h(QuotaWindow, { value: bucket.primary }), h(QuotaWindow, { value: bucket.secondary })))) : h('p', { className: 'muted', style: { marginTop: 14 } }, busy === 'quota' ? '正在读取 OpenAI 额度…' : quotaError ?? '连接账号后可读取额度。'),
-          quota && h('p', { className: 'small muted', style: { marginTop: 14 } }, `更新于 ${date(quota.fetchedAt)} · 与本机 Codex 共享额度`)),
+          quota?.buckets?.length && quotaError && h('p', { className: 'small muted', style: { marginTop: 10 }, role: 'alert' }, quotaError),
+          quota && h('p', { className: 'small muted', style: { marginTop: 14 } },
+            `${quota.cached ? '上次更新' : '更新于'} ${date(quota.fetchedAt)} · 与本机 Codex 共享额度`,
+            quota.cached && busy === 'quota' ? ' · 正在刷新…' : quota.cached ? ' · 刷新未完成' : '')),
         h('p', { className: 'footer' }, '使用时，在会话模型选择器中选择「OpenAI · Codex 额度」。系统代理切换后需要重启 Harness。'));
     }
 

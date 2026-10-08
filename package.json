@@ -1,6 +1,6 @@
 {
   "name": "dsh-openai-auth",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Use your local Codex ChatGPT login in DeepSeek Harness Desktop",
   "type": "module",
   "license": "MIT",
@@ -89,11 +89,13 @@
     "permissions": {
       "filesystemRead": [
         "Configured CODEX_HOME/auth.json",
-        "Model metadata cache under ~/.dsh/cache/dsh-openai-auth or configured modelCachePath"
+        "Model metadata cache under ~/.dsh/cache/dsh-openai-auth or configured modelCachePath",
+        "Last-quota snapshot under ~/.dsh/cache/dsh-openai-auth or configured quotaCachePath"
       ],
       "filesystemWrite": [
         "Harness native connection preference; official Codex CLI owns login-cache updates",
-        "Model metadata cache under ~/.dsh/cache/dsh-openai-auth or configured modelCachePath"
+        "Model metadata cache under ~/.dsh/cache/dsh-openai-auth or configured modelCachePath",
+        "Last-quota snapshot under ~/.dsh/cache/dsh-openai-auth or configured quotaCachePath"
       ],
       "process": [
         "Configured official Codex app-server for account operations and model discovery",
@@ -103,7 +105,7 @@
         "OpenAI sign-in, subscription inference and quota reads"
       ]
     },
-    "retention": "Session UI state; sanitized account-scoped model metadata persisted locally until replaced or removed",
+    "retention": "Session UI state; sanitized account-scoped model metadata and the last rate-limit snapshot persisted locally until replaced or removed",
     "jurisdiction": []
   }
 }

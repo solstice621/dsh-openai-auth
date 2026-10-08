@@ -4,6 +4,7 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { AuthController, authRpcHandler, normalizeQuota } from '../src/auth-controller.js';
 import { CodexAppServer } from '../src/app-server.js';
+import { accountKey } from '../src/quota-cache.js';
 
 const auth = { token: 'private-access-token', expiresAt: 2000000000000, account: { id: 'private-account-id', email: 'test@example.com', plan: 'pro' } };
 const source = () => ({ codexHome: '/test/home', codexCommand: '/test/codex', read: async () => auth, refresh: async () => {} });
@@ -108,4 +109,58 @@ test('app-server correlates concurrent calls, uses file storage, sanitizes error
   assert.equal(spawned[2].shell, false); assert.equal(spawned[2].env.CODEX_HOME, '/test/home');
   assert.ok(spawned[1].includes('cli_auth_credentials_store="file"'));
   server.close(); await assert.rejects(server.request('one'), /已关闭/);
+});
+
+test('a successful quota read is remembered for that account and reused without the app-server', async () => {
+  const writes = [];
+  const store = { value: null, read: async () => store.value, write: async value => { writes.push(value); store.value = value; } };
+  let account = 'private-account-id', opens = 0;
+  const controller = create({
+    source: { ...source(), read: async () => ({ ...auth, account: { ...auth.account, id: account } }) },
+    quotaStore: store, now: () => 5000,
+    createServer: () => { opens++; return { initialize: async () => {}, close: () => {}, request: async method => method === 'account/read'
+      ? { account: { type: 'chatgpt' } }
+      : { rateLimits: { primary: { usedPercent: 10, windowDurationMins: 300, resetsAt: 2000 } } } }; },
+  });
+  const value = await controller.quota();
+  assert.equal(value.buckets[0].primary.usedPercent, 10);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].version, 1);
+  assert.equal(writes[0].fetchedAt, 5000);
+  assert.equal(writes[0].accountKey, accountKey(auth.account.id));
+  assert.ok(!JSON.stringify(writes[0]).includes(auth.account.id));
+
+  const opensAfterQuota = opens;
+  const cached = await controller.cachedQuota();
+  assert.equal(cached.cached, true);
+  assert.equal(cached.fetchedAt, 5000);
+  assert.equal(cached.buckets[0].primary.usedPercent, 10);
+  assert.equal(opens, opensAfterQuota);
+
+  // Another account's snapshot is not this account's quota.
+  account = 'changed-account';
+  assert.equal(await controller.cachedQuota(), null);
+});
+
+test('the cached quota RPC answers from an empty cache without touching Codex', async () => {
+  let opens = 0;
+  const controller = create({ quotaStore: { read: async () => null, write: async () => {} }, createServer: () => { opens++; return {}; } });
+  const handler = authRpcHandler(controller);
+  const empty = await handler('cached', {});
+  assert.equal(empty.ok, true);
+  assert.equal(empty.value, null);
+  assert.equal(opens, 0);
+  assert.equal((await handler('cached', { token: 'injected' })).ok, false);
+  assert.equal((await handler('nope', {})).ok, false);
+});
+
+test('a quota read survives an unwritable cache and a missing cache never breaks the page', async () => {
+  const controller = create({
+    quotaStore: { read: async () => null, write: async () => { throw Error('disk full'); } },
+    createServer: () => ({ initialize: async () => {}, close: () => {}, request: async method => method === 'account/read'
+      ? { account: { type: 'chatgpt' } } : { rateLimits: { primary: { usedPercent: 3 } } } }),
+  });
+  assert.equal((await controller.quota()).buckets[0].primary.usedPercent, 3);
+  const bare = create();
+  assert.equal(await bare.cachedQuota(), null);
 });

@@ -9,6 +9,7 @@ import { AuthController, authRpcHandler } from './auth-controller.js';
 import { clientRequestSchema } from '@deepseek-ai/dsh-client-connection';
 import { supplementCodexModels } from './model-catalog.js';
 import { ModelSync, modelCacheStore } from './model-sync.js';
+import { quotaCacheFile, quotaCacheStore } from './quota-cache.js';
 
 export const name = 'dsh-openai-auth';
 export const inject = ['llm', 'connection'];
@@ -21,6 +22,7 @@ export const Config = Schema.object({
   modelRefreshMinutes: Schema.number().min(5).max(10080).default(360).description('Automatically refresh the model catalog at this interval'),
   modelDiscoveryCommand: Schema.string().description('Optional official Codex executable for model discovery; defaults to codexCommand'),
   modelCachePath: Schema.string().description('Optional model metadata cache path; defaults to ~/.dsh/cache/dsh-openai-auth'),
+  quotaCachePath: Schema.string().description('Optional last-quota cache path; defaults to ~/.dsh/cache/dsh-openai-auth'),
   useSystemProxy: Schema.boolean().default(process.platform === 'darwin').description('Use the active macOS HTTP proxy when the GUI Host has no explicit proxy'),
 });
 
@@ -115,12 +117,13 @@ export async function apply(ctx, config) {
     onUpdate: () => registration?.replace?.([PROVIDER]),
   });
   ctx.effect(() => () => modelSync.dispose());
-  const controller = new AuthController({ source, enabled, modelSync, beforeAuth: () => bridge.ensure(), childEnvironment });
+  const controller = new AuthController({ source, enabled, modelSync, beforeAuth: () => bridge.ensure(), childEnvironment,
+    quotaStore: quotaCacheStore(config.quotaCachePath ?? quotaCacheFile(source.codexHome)) });
   ctx.effect(() => () => controller.dispose());
   const handle = authRpcHandler(controller);
   // Exact /api routes inherit Harness's authenticated Host/Origin boundary and
   // also work through the desktop's in-process Fetch carrier.
-  for (const endpoint of ['state', 'refresh', 'quota', 'login', 'cancel', 'models']) {
+  for (const endpoint of ['state', 'refresh', 'quota', 'cached', 'login', 'cancel', 'models']) {
     ctx.connection.fetch.register({
       path: `/api/codex-auth/${endpoint}`, methods: ['POST'], requestBody: 'buffered',
       fetch: async request => {
