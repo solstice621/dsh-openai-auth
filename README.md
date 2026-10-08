@@ -33,6 +33,7 @@
 | 查看额度 | 显示官方返回的各额度窗口、剩余比例和重置时间 |
 | 管理连接 | 启用或停用 Harness 中的 Codex 连接，并保存选择 |
 | 隐藏账号 | 录屏、演示或截图前隐藏邮箱 |
+| GPT-6.1 Sol | 补齐旧版 Harness 目录缺少的模型入口；支持 low / medium / high / xhigh / max |
 | 原生对话能力 | 复用 Harness adapter 的流式输出、工具调用、历史 replay 和图片处理 |
 | 系统代理 | macOS 上按当前系统 HTTP/HTTPS 代理运行，不修改系统设置 |
 
@@ -52,12 +53,12 @@
 3. 输入以下 GitHub 包地址，或从 [Releases](https://github.com/solstice621/dsh-openai-auth/releases) 下载 `.tgz` 后填写其绝对路径：
 
    ```text
-   github:solstice621/dsh-openai-auth#v0.2.3
+   github:solstice621/dsh-openai-auth#v0.2.4
    ```
 
 4. 安装并启用插件，然后完全退出并重新打开 Harness。
 5. 打开左下角「更多」→「设置」→ **OpenAI / Codex**，确认账号已连接。
-6. 在会话模型选择器中选择 **OpenAI · Codex 额度** 下的模型。
+6. 在会话模型选择器中选择 **OpenAI · Codex 额度** 下的模型，例如 **GPT-6.1 Sol**。
 
 本仓库提供可直接运行的 JavaScript 和原生 client entry，不需要执行 `prepare`、`postinstall` 或第三方安装脚本，也不需要修改 App 安装包或 asar。
 
@@ -135,7 +136,7 @@
 
 **网络超时或代理已切换**：检查当前网络与代理是否可达，重启 Harness，再刷新授权。不要把仅在特定网络可用的代理永久启用。
 
-**模型调用被拒绝**：检查账号权限、额度和限速，尝试该账号可用的模型。目录来自 Harness 捆绑版本，并非账号权限证明。
+**模型调用被拒绝**：检查账号权限、额度和限速，尝试该账号可用的模型。目录以 Harness 捆绑版本为主；0.2.4 为旧目录补充 GPT-6.1 Sol，上游已有该模型时优先采用上游元数据。模型目录并非账号权限证明。
 
 **为什么已有会话没自动换模型**：插件不会重写旧会话；请在会话模型选择器中切换。
 
@@ -148,9 +149,9 @@ npm test
 npm pack --ignore-scripts
 ```
 
-18 项本地测试覆盖缓存读取、续期并发、取消、错误脱敏、账号一致性、额度归一化、登录通知、连接状态及代理变更。原生 runtime 另外验证了路由撤销、官方登录启动与取消、真实续期、额度查询、工具调用和桌面推理。浏览器重新登录最后一步需要账号持有人完成；本项目未用自动化替用户更换账号。
+22 项本地测试覆盖模型目录补齐、上游元数据优先、推理等级、缓存读取、续期并发、取消、错误脱敏、账号一致性、额度归一化、登录通知、连接状态及代理变更。原生 runtime 另外验证了路由撤销、官方登录启动与取消、真实续期、额度查询、工具调用和桌面推理。浏览器重新登录最后一步需要账号持有人完成；本项目未用自动化替用户更换账号。
 
-已验证模型包括 GPT-6 Sol 的桌面请求，以及 GPT-5.6 Sol 的工具调用与历史回放。其他列出模型的可用性仍以各账号实际调用为准。
+已验证模型包括 GPT-6.1 Sol 的原生流式请求、工具调用与历史回放，GPT-6 Sol 的桌面请求，以及 GPT-5.6 Sol 的工具调用与历史回放。GPT-6.1 Sol 暂沿用当前 Harness 原生 Codex 路由的 272,000 token 上下文预算；API 文档中的更大上下文未在此订阅路由验证。其他列出模型的可用性仍以各账号实际调用为准。
 
 ## English overview
 
@@ -158,6 +159,7 @@ A native bundle and settings plugin for DeepSeek Harness Desktop. It reuses the 
 
 ## 依据与许可
 
+- [GPT-6.1 Sol 官方模型信息](https://developers.openai.com/api/docs/models/gpt-6.1-sol)
 - [OpenAI Codex 认证](https://learn.chatgpt.com/docs/auth)
 - [OpenAI Codex app-server](https://learn.chatgpt.com/docs/app-server)
 - [Harness 插件打包与分发](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md)

@@ -42,7 +42,7 @@ export class CodexAppServer {
   }
 
   async initialize() {
-    await this.request('initialize', { clientInfo: { name: 'dsh_openai_auth', title: 'Harness OpenAI Auth', version: '0.2.3' } });
+    await this.request('initialize', { clientInfo: { name: 'dsh_openai_auth', title: 'Harness OpenAI Auth', version: '0.2.4' } });
     this.send({ method: 'initialized' });
     return this;
   }

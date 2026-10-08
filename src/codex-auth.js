@@ -116,7 +116,7 @@ export function refreshWithCodex({ codexHome, codexCommand, env = process.env, t
         }
       }
     });
-    send({ id: 1, method: 'initialize', params: { clientInfo: { name: 'dsh_openai_auth', title: 'DeepSeek Harness OpenAI Auth', version: '0.2.3' } } });
+    send({ id: 1, method: 'initialize', params: { clientInfo: { name: 'dsh_openai_auth', title: 'DeepSeek Harness OpenAI Auth', version: '0.2.4' } } });
   });
 }
 

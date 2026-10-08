@@ -7,6 +7,7 @@ import { CodexTokenSource } from './codex-auth.js';
 import { SystemProxyBridge } from './system-proxy.js';
 import { AuthController, authRpcHandler } from './auth-controller.js';
 import { clientRequestSchema } from '@deepseek-ai/dsh-client-connection';
+import { supplementCodexModels } from './model-catalog.js';
 
 export const name = 'dsh-openai-auth';
 export const inject = ['llm', 'connection'];
@@ -33,7 +34,7 @@ export function childEnvironment() {
 export function createCodexAdapter(ctx, config = {}, sourceOverride, beforeAuth = async () => {}) {
   const source = sourceOverride ?? new CodexTokenSource({ ...config, childEnvironment });
   const native = openaiCodexProvider();
-  const models = native.getModels().map(model => ({ ...model, provider: PROVIDER }));
+  const models = supplementCodexModels(native.getModels()).map(model => ({ ...model, provider: PROVIDER }));
   const provider = {
     ...native,
     id: PROVIDER,

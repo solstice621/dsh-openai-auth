@@ -4,7 +4,8 @@ Validated on 2026-10-08 with macOS, DeepSeek Harness Desktop 0.2.0-rc.2, the bun
 
 | Check | Result |
 | --- | --- |
-| Local unit tests | 18 passed: authentication, cache reload, refresh concurrency, cancellation, sanitized errors, account identity, quota windows, sign-in tracking and system-proxy changes |
+| Local unit tests | 22 passed: model catalog supplementation, upstream preference, supported reasoning levels, authentication, cache reload, refresh concurrency, cancellation, sanitized errors, account identity, quota windows, sign-in tracking and system-proxy changes |
+| Desktop model picker | GPT-6.1 Sol visible under OpenAI · Codex 额度 after installing 0.2.4 and fully restarting; previous default retained |
 | Native bundle loader | Enabled successfully in the Desktop profile |
 | Native settings page | Account state, quota, expiry and connection toggle displayed |
 | Native API lifecycle | Safe state request succeeded; withdrawn plugin route returned 404 |
@@ -13,6 +14,7 @@ Validated on 2026-10-08 with macOS, DeepSeek Harness Desktop 0.2.0-rc.2, the bun
 | Subscription quota | Official account/rateLimits/read succeeded and Desktop displayed available windows |
 | Connection preference | Desktop disable saved false; enable saved true and restored the connection |
 | Native inference | GPT-6 Sol returned the requested desktop probe response |
+| GPT-6.1 Sol | Exact model ID returned the requested response after one tool call; native streaming and replay passed without fallback |
 | Tools and replay | GPT-5.6 Sol made a tool call and consumed its response through the native adapter |
 | Account hiding | Desktop screenshot control hid the email without changing authentication |
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.4
+
+- Supplement older Harness catalogs with GPT-6.1 Sol using the native Codex Responses transport.
+- Expose only its supported reasoning levels: low, medium, high, xhigh and max.
+- Prefer upstream model metadata once Harness includes GPT-6.1 Sol; preserve existing models and defaults.
+- Verify exact GPT-6.1 Sol subscription inference, tool calls and history replay without model fallback.
+
 ## 0.2.3
 
 - Add Chinese and English plugin display metadata and a self-contained icon.
