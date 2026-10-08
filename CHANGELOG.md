@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+- Discover models through official Codex app-server model/list at startup and every six hours by default.
+- Add a native settings card with sync state, timestamps, model counts and a manual refresh button.
+- Publish catalog changes to the native picker without resetting the current model or in-flight request metadata.
+- Persist sanitized, account-scoped model metadata; restore it on startup and keep the successful catalog when refresh fails.
+- Validate pagination, input modalities and supported reasoning efforts; pause discovery while the connection is disabled.
+- Allow a separate current official Codex executable for model discovery without changing account-operation configuration.
+
 ## 0.2.4
 
 - Supplement older Harness catalogs with GPT-6.1 Sol using the native Codex Responses transport.

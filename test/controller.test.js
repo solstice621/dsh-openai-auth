@@ -32,6 +32,19 @@ test('UI state and RPC errors never expose credentials or raw exceptions', async
   assert.equal(error.ok, false); assert.ok(!JSON.stringify(error).includes('private-refresh-token'));
 });
 
+test('model refresh RPC returns safe sync state and observes login identity', async () => {
+  let refreshed = 0, observed;
+  const controller = create({ modelSync: {
+    observeAccount: id => { observed = id; return false; },
+    state: () => ({ automatic: true, totalModels: 9, source: 'codex' }),
+    refresh: async () => { refreshed++; },
+  } });
+  const result = await authRpcHandler(controller)('models', {});
+  assert.equal(result.ok, true); assert.equal(refreshed, 1); assert.equal(observed, auth.account.id);
+  assert.equal(result.value.models.totalModels, 9);
+  assert(!JSON.stringify(result).includes(auth.token)); assert(!JSON.stringify(result).includes(auth.account.id));
+});
+
 test('quota prefers multiple buckets, clamps percentages, preserves unknown windows, rejects account mismatch', () => {
   const result = normalizeQuota({ accountId: auth.account.id, rateLimits: { primary: { usedPercent: 99 } }, rateLimitsByLimitId: {
     codex: { primary: { usedPercent: 20, windowDurationMins: 300, resetsAt: 2000000 }, secondary: null },

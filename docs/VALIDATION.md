@@ -1,11 +1,15 @@
 # Validation
 
-Validated on 2026-10-08 with macOS, DeepSeek Harness Desktop 0.2.0-rc.2, the bundled Node.js 24.18.1 runtime, and official Codex CLI 0.154.0.
+Validated on 2026-10-08 with macOS, DeepSeek Harness Desktop 0.2.0-rc.2, the bundled Node.js 24.18.1 runtime, official Codex CLI 0.154.0 for account operations, and Desktop-bundled official Codex 0.162.0-alpha.2 for model discovery.
 
 | Check | Result |
 | --- | --- |
-| Local unit tests | 22 passed: model catalog supplementation, upstream preference, supported reasoning levels, authentication, cache reload, refresh concurrency, cancellation, sanitized errors, account identity, quota windows, sign-in tracking and system-proxy changes |
-| Desktop model picker | GPT-6.1 Sol visible under OpenAI · Codex 额度 after installing 0.2.4 and fully restarting; previous default retained |
+| Local unit tests | 32 passed: model catalog supplementation, upstream preference, supported reasoning levels, authentication, cache reload, refresh concurrency, cancellation, sanitized errors, account identity, quota windows, sign-in tracking and system-proxy changes |
+| Desktop model picker | Officially discovered GPT-6.1 Sol and the merged catalog visible after installing 0.3.0 and fully restarting; current model and Xhigh effort retained |
+| Model discovery | Official model/list returned 7 models including GPT-6.1 Sol; merged native catalog held 9 entries |
+| Dynamic adapter | A synthetic future entry became resolvable without rebuilding the adapter; prepared request metadata stayed unchanged |
+| Sync regression tests | Startup, timed refresh, pagination, concurrent requests, cache recovery, account changes, disabled connection and late disposal verified |
+| Native sync UI | Startup showed the official directory; manual refresh updated the success timestamp and displayed 9 models; disable paused sync and enable restored it |
 | Native bundle loader | Enabled successfully in the Desktop profile |
 | Native settings page | Account state, quota, expiry and connection toggle displayed |
 | Native API lifecycle | Safe state request succeeded; withdrawn plugin route returned 404 |

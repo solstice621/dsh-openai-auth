@@ -8,6 +8,7 @@ import { SystemProxyBridge } from './system-proxy.js';
 import { AuthController, authRpcHandler } from './auth-controller.js';
 import { clientRequestSchema } from '@deepseek-ai/dsh-client-connection';
 import { supplementCodexModels } from './model-catalog.js';
+import { ModelSync, modelCacheStore } from './model-sync.js';
 
 export const name = 'dsh-openai-auth';
 export const inject = ['llm', 'connection'];
@@ -17,6 +18,9 @@ export const Config = Schema.object({
   codexHome: Schema.string().description('Codex login directory; defaults to CODEX_HOME or ~/.codex'),
   codexCommand: Schema.string().default('codex').description('Official Codex CLI executable; an absolute path is useful on desktop'),
   refreshSkewSeconds: Schema.number().min(0).max(3600).default(300),
+  modelRefreshMinutes: Schema.number().min(5).max(10080).default(360).description('Automatically refresh the model catalog at this interval'),
+  modelDiscoveryCommand: Schema.string().description('Optional official Codex executable for model discovery; defaults to codexCommand'),
+  modelCachePath: Schema.string().description('Optional model metadata cache path; defaults to ~/.dsh/cache/dsh-openai-auth'),
   useSystemProxy: Schema.boolean().default(process.platform === 'darwin').description('Use the active macOS HTTP proxy when the GUI Host has no explicit proxy'),
 });
 
@@ -31,11 +35,11 @@ export function childEnvironment() {
 
 // This adapter uses the host's provider catalog, wire protocol, history replay,
 // tool-call conversion, image projection, cancellation and attribution headers.
-export function createCodexAdapter(ctx, config = {}, sourceOverride, beforeAuth = async () => {}) {
+export function createCodexAdapter(ctx, config = {}, sourceOverride, beforeAuth = async () => {}, getCatalog) {
   const source = sourceOverride ?? new CodexTokenSource({ ...config, childEnvironment });
   const native = openaiCodexProvider();
   const models = supplementCodexModels(native.getModels()).map(model => ({ ...model, provider: PROVIDER }));
-  const provider = {
+  const providerBase = {
     ...native,
     id: PROVIDER,
     name: 'OpenAI · Codex 额度',
@@ -48,23 +52,32 @@ export function createCodexAdapter(ctx, config = {}, sourceOverride, beforeAuth 
         return { auth: { apiKey: await source.accessToken(signal) }, source: 'Codex ChatGPT login' };
       },
     } },
-    getModels: () => models,
   };
-  const profiles = new Map([[PROVIDER, {
-    provider: PROVIDER,
-    displayName: provider.name,
-    piProvider: provider,
-    transport: 'sse',
-    streamIdleTimeoutMs: 300000,
-    maxRequestImageBytes: 20971520,
-    requestImagePixelBudget: 4194304,
-    requestImageMaxBytes: 1048576,
-    retryPolicy: resolveRetryPolicy({ mode: 'normal', maxRetries: 2 }, name),
-    configuredMaxTokens: new Map(),
-    modelErrors: new Map(),
-  }]]);
+  let previousModels, profiles;
+  const currentProfiles = () => {
+    const catalog = getCatalog?.() ?? models;
+    if (catalog === previousModels) return profiles;
+    previousModels = catalog;
+    // Freeze each collection's catalog so a refresh cannot change a prepared
+    // request's model metadata while that request is running.
+    const provider = { ...providerBase, getModels: () => catalog };
+    profiles = new Map([[PROVIDER, {
+      provider: PROVIDER,
+      displayName: provider.name,
+      piProvider: provider,
+      transport: 'sse',
+      streamIdleTimeoutMs: 300000,
+      maxRequestImageBytes: 20971520,
+      requestImagePixelBudget: 4194304,
+      requestImageMaxBytes: 1048576,
+      retryPolicy: resolveRetryPolicy({ mode: 'normal', maxRetries: 2 }, name),
+      configuredMaxTokens: new Map(),
+      modelErrors: new Map(),
+    }]]);
+    return profiles;
+  };
   const adapter = new PiAiAdapter({
-    profiles: () => profiles,
+    profiles: currentProfiles,
     resolveApiKey: async () => undefined,
     auth: {
       credentials: {
@@ -93,12 +106,21 @@ export async function apply(ctx, config) {
   await bridge.start();
   const source = new CodexTokenSource({ ...config, childEnvironment });
   const enabled = () => (typeof config.enabled?.get === 'function' ? config.enabled.get() : config.enabled) !== false;
-  const controller = new AuthController({ source, enabled, beforeAuth: () => bridge.ensure(), childEnvironment });
+  let registration;
+  const modelSync = new ModelSync({ source, enabled, beforeAuth: () => bridge.ensure(), childEnvironment,
+    baseline: supplementCodexModels(openaiCodexProvider().getModels()).map(model => ({ ...model, provider: PROVIDER })),
+    codexCommand: config.modelDiscoveryCommand ?? source.codexCommand,
+    intervalMinutes: config.modelRefreshMinutes ?? 360,
+    ...(config.modelCachePath ? { store: modelCacheStore(config.modelCachePath) } : {}),
+    onUpdate: () => registration?.replace?.([PROVIDER]),
+  });
+  ctx.effect(() => () => modelSync.dispose());
+  const controller = new AuthController({ source, enabled, modelSync, beforeAuth: () => bridge.ensure(), childEnvironment });
   ctx.effect(() => () => controller.dispose());
   const handle = authRpcHandler(controller);
   // Exact /api routes inherit Harness's authenticated Host/Origin boundary and
   // also work through the desktop's in-process Fetch carrier.
-  for (const endpoint of ['state', 'refresh', 'quota', 'login', 'cancel']) {
+  for (const endpoint of ['state', 'refresh', 'quota', 'login', 'cancel', 'models']) {
     ctx.connection.fetch.register({
       path: `/api/codex-auth/${endpoint}`, methods: ['POST'], requestBody: 'buffered',
       fetch: async request => {
@@ -109,9 +131,11 @@ export async function apply(ctx, config) {
       },
     });
   }
-  ctx.llm.registerAdapter([PROVIDER], createCodexAdapter(ctx, config, source, async () => {
+  registration = ctx.llm.registerAdapter([PROVIDER], createCodexAdapter(ctx, config, source, async () => {
     if (!enabled()) throw new LlmError('Codex 连接已停用，请在设置 → OpenAI / Codex 中启用。', 'CODEX_CONNECTION_DISABLED');
     await bridge.ensure();
-  }));
+  }, () => modelSync.models));
+  // Model discovery never delays startup or replaces a working catalog on error.
+  modelSync.start().catch(() => ctx.logger.warn('Codex model sync failed; the current catalog remains available.'));
   ctx.logger.info('Codex subscription provider is available. Authentication remains managed by the local Codex CLI.');
 }

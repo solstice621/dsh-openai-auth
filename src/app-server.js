@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { CodexAuthError } from './codex-auth.js';
 
-// Official account RPC only. Provider output and tokens never reach the UI.
+// Official account and model RPC only. Raw provider output never reaches the UI.
 export class CodexAppServer {
   constructor({ codexHome, codexCommand, env = process.env, spawnProcess = spawn, timeoutMs = 45000, onNotification = () => {} }) {
     this.pending = new Map();
@@ -42,7 +42,7 @@ export class CodexAppServer {
   }
 
   async initialize() {
-    await this.request('initialize', { clientInfo: { name: 'dsh_openai_auth', title: 'Harness OpenAI Auth', version: '0.2.4' } });
+    await this.request('initialize', { clientInfo: { name: 'dsh_openai_auth', title: 'Harness OpenAI Auth', version: '0.3.0' } });
     this.send({ method: 'initialized' });
     return this;
   }

@@ -18,6 +18,10 @@
 
 ![在会话中选择 OpenAI · Codex 额度模型](docs/screenshots/02-model-picker.jpg)
 
+### 模型自动同步
+
+![自动同步状态和手动刷新模型](docs/screenshots/04-model-sync.jpg)
+
 ### 停用连接
 
 ![停用 Harness 连接，保留本机 Codex 登录](docs/screenshots/03-connection-disabled.jpg)
@@ -33,6 +37,7 @@
 | 查看额度 | 显示官方返回的各额度窗口、剩余比例和重置时间 |
 | 管理连接 | 启用或停用 Harness 中的 Codex 连接，并保存选择 |
 | 隐藏账号 | 录屏、演示或截图前隐藏邮箱 |
+| 自动同步模型 | 启动时及默认每 6 小时读取官方 Codex 目录；设置页可手动刷新 |
 | GPT-6.1 Sol | 补齐旧版 Harness 目录缺少的模型入口；支持 low / medium / high / xhigh / max |
 | 原生对话能力 | 复用 Harness adapter 的流式输出、工具调用、历史 replay 和图片处理 |
 | 系统代理 | macOS 上按当前系统 HTTP/HTTPS 代理运行，不修改系统设置 |
@@ -53,7 +58,7 @@
 3. 输入以下 GitHub 包地址，或从 [Releases](https://github.com/solstice621/dsh-openai-auth/releases) 下载 `.tgz` 后填写其绝对路径：
 
    ```text
-   github:solstice621/dsh-openai-auth#v0.2.4
+   github:solstice621/dsh-openai-auth#v0.3.0
    ```
 
 4. 安装并启用插件，然后完全退出并重新打开 Harness。
@@ -90,6 +95,16 @@
 
 「停用此连接」只阻止该 Harness provider 发起新的推理请求，并保存选择；不会退出 Codex、删除缓存或取消已有请求。点击「启用此连接」恢复使用。
 
+### 自动同步模型
+
+插件在启动时通过官方 `codex app-server` 的 `model/list` 读取模型目录，默认每 **6 小时**刷新；每分钟检查一次账号变化，切换账号后重新同步。设置页的「模型自动同步」卡片显示模型数量、目录来源、最近成功时间，提供「刷新模型」按钮。停用连接时自动同步暂停。
+
+目录更新会通知 Harness 的原生模型选择器，无需重启；保留现有模型和当前选择，正在运行的请求继续使用准备请求时的模型描述。网络或读取失败时保留本账号最近成功的目录，重启后也可从本地缓存恢复。缓存只保存经过筛选的模型字段、账号标识的 SHA-256 和成功时间，不保存 token、邮箱或原始 RPC 数据。
+
+`model/list` 可能使用 Codex 的内置或缓存目录，因此新模型出现速度仍取决于**模型发现所使用的官方 Codex 版本及账号**。默认使用 `codexCommand`；也可以将 `modelDiscoveryCommand` 指向本机另一份更新的官方 Codex 可执行文件。插件不会自动下载或运行新代码。目录更新适用于现有 Codex Responses 协议；协议变化仍需要升级插件。
+
+只展示当前 Harness 支持的 text/image 输入及 off、minimal、low、medium、high、xhigh、max 推理选项；例如客户端目录返回的 ultra 需要自动任务委派，当前插件不提供该等级。未知新模型若没有限额数据，使用 16,384 上下文、4,096 输出的保守本地预算，价格未知按零估计；这些不是服务端容量或价格承诺。已有模型继续保留 Harness 的限额和兼容性元数据。
+
 ## 配置
 
 桌面进程的 PATH 可能找不到 Codex。用 `command -v codex` 查询可执行文件，然后在桌面 profile 的 `cordis.patch.yml` 配置插件：
@@ -103,6 +118,9 @@
     # codexHome: /absolute/path/to/.codex
     # useSystemProxy: true
     # refreshSkewSeconds: 300
+    # modelRefreshMinutes: 360
+    # modelDiscoveryCommand: /absolute/path/to/current/official/codex
+    # modelCachePath: /absolute/path/to/models.json
 ```
 
 | 字段 | 默认值 | 说明 |
@@ -111,6 +129,9 @@
 | `codexCommand` | `codex` | 官方 Codex CLI 的命令或绝对路径 |
 | `codexHome` | `CODEX_HOME` 或 `~/.codex` | 登录缓存所在目录 |
 | `refreshSkewSeconds` | `300` | 提前续期窗口，范围 0–3600 秒 |
+| `modelRefreshMinutes` | `360` | 自动目录刷新周期，范围 5–10080 分钟 |
+| `modelDiscoveryCommand` | `codexCommand` | 模型发现所用官方 Codex，可配置较新的本机版本 |
+| `modelCachePath` | `~/.dsh/cache/dsh-openai-auth/<home-hash>/models.json` | 经过筛选的模型元数据缓存；按 Codex 目录分开、按账号校验 |
 | `useSystemProxy` | macOS 为 `true` | 没有 Harness 显式代理时，沿用当前系统静态 HTTP/HTTPS 代理 |
 
 除连接开关外，修改配置后请重启 Harness。
@@ -122,6 +143,7 @@
 - 登录和续期由官方 Codex CLI 负责写入 Codex 缓存；插件不自行实现 refresh token 轮换。
 - 后端会启动所配置的 Codex 可执行文件，使用 app-server 的账号 RPC。请只配置自己信任的官方 CLI 路径。
 - 对话内容按正常模型调用发送给 OpenAI。账号、登录和额度请求通过官方 Codex；插件没有自己的统计或中转服务。
+- 模型缓存以本地私有权限写入 `~/.dsh/cache/dsh-openai-auth/`，只记录模型元数据和不可逆账号摘要；切换账号不会加载另一账号的目录。
 - 页面操作经过 Harness 原生 `/api` 认证边界，卸载插件时撤销其路由和后台资源。
 - macOS 读取当前系统代理时会调用系统自带的 `scutil`。如果 Harness 已有显式代理，优先沿用该配置。
 - 使用系统代理时，代理设置变化会阻止后续请求并提示重启，不会自动修改操作系统代理或启动 VPN。
@@ -136,7 +158,7 @@
 
 **网络超时或代理已切换**：检查当前网络与代理是否可达，重启 Harness，再刷新授权。不要把仅在特定网络可用的代理永久启用。
 
-**模型调用被拒绝**：检查账号权限、额度和限速，尝试该账号可用的模型。目录以 Harness 捆绑版本为主；0.2.4 为旧目录补充 GPT-6.1 Sol，上游已有该模型时优先采用上游元数据。模型目录并非账号权限证明。
+**模型调用被拒绝**：检查账号权限、额度和限速，尝试该账号可用的模型。目录以 Harness 捆绑版本为主；0.3.0 为旧目录补充 GPT-6.1 Sol，上游已有该模型时优先采用上游元数据。模型目录并非账号权限证明。
 
 **为什么已有会话没自动换模型**：插件不会重写旧会话；请在会话模型选择器中切换。
 
@@ -149,13 +171,13 @@ npm test
 npm pack --ignore-scripts
 ```
 
-22 项本地测试覆盖模型目录补齐、上游元数据优先、推理等级、缓存读取、续期并发、取消、错误脱敏、账号一致性、额度归一化、登录通知、连接状态及代理变更。原生 runtime 另外验证了路由撤销、官方登录启动与取消、真实续期、额度查询、工具调用和桌面推理。浏览器重新登录最后一步需要账号持有人完成；本项目未用自动化替用户更换账号。
+32 项本地测试覆盖模型目录补齐、上游元数据优先、推理等级、自动同步周期、分页、缓存恢复、账号切换、停止后的资源清理、缓存读取、续期并发、取消、错误脱敏、账号一致性、额度归一化、登录通知、连接状态及代理变更。原生 runtime 另外验证了路由撤销、官方登录启动与取消、真实续期、额度查询、工具调用和桌面推理。浏览器重新登录最后一步需要账号持有人完成；本项目未用自动化替用户更换账号。
 
 已验证模型包括 GPT-6.1 Sol 的原生流式请求、工具调用与历史回放，GPT-6 Sol 的桌面请求，以及 GPT-5.6 Sol 的工具调用与历史回放。GPT-6.1 Sol 暂沿用当前 Harness 原生 Codex 路由的 272,000 token 上下文预算；API 文档中的更大上下文未在此订阅路由验证。其他列出模型的可用性仍以各账号实际调用为准。
 
 ## English overview
 
-A native bundle and settings plugin for DeepSeek Harness Desktop. It reuses the local official Codex ChatGPT login and subscription usage, adds browser sign-in, managed token refresh, quota windows, and a persistent connection toggle. Credentials stay managed by Codex; display-safe data only reaches the UI. The current tested target is macOS, Harness Desktop `0.2.0-rc.2`, and Codex CLI `0.154.0`. File-based login storage is required. This independent community plugin is not an official OpenAI or DeepSeek product.
+A native bundle and settings plugin for DeepSeek Harness Desktop. It reuses the local official Codex ChatGPT login and subscription usage, adds browser sign-in, managed token refresh, quota windows, a persistent connection toggle, and automatic model discovery with a manual refresh control. Credentials stay managed by Codex; display-safe data only reaches the UI. The current tested target is macOS, Harness Desktop `0.2.0-rc.2`, Codex CLI `0.154.0` for account operations, and Desktop-bundled official Codex `0.162.0-alpha.2` for model discovery. File-based login storage is required. This independent community plugin is not an official OpenAI or DeepSeek product.
 
 ## 依据与许可
 

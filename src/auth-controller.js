@@ -20,21 +20,29 @@ export function normalizeQuota(result, expectedAccountId) {
 }
 
 export class AuthController {
-  constructor({ source, enabled = true, beforeAuth, childEnvironment, createServer = options => new CodexAppServer(options), now = Date.now }) {
-    Object.assign(this, { source, enabled, beforeAuth, childEnvironment, createServer, now });
+  constructor({ source, enabled = true, beforeAuth, childEnvironment, modelSync, createServer = options => new CodexAppServer(options), now = Date.now }) {
+    Object.assign(this, { source, enabled, beforeAuth, childEnvironment, modelSync, createServer, now });
   }
 
   async getState() {
     const enabled = typeof this.enabled === 'function' ? this.enabled() : this.enabled;
     let auth;
     try { auth = await this.source.read(); } catch (error) {
-      return { enabled, connected: false, account: null, expiresAt: null, error: error.code ?? 'CODEX_AUTH_REQUIRED', attempt: this.safeAttempt() };
+      this.modelSync?.observeAccount(undefined);
+      return { enabled, connected: false, account: null, expiresAt: null, error: error.code ?? 'CODEX_AUTH_REQUIRED', attempt: this.safeAttempt(), models: this.modelSync?.state() ?? null };
     }
+    if (this.modelSync?.observeAccount(auth.account.id)) this.modelSync.tick(true).catch(() => {});
     // Explicit allowlist: no access/id/refresh token, raw document, or account id.
     return { enabled, connected: auth.expiresAt > this.now(),
       account: { key: createHash('sha256').update(auth.account?.id ?? '').digest('hex').slice(0, 16), email: auth.account?.email ?? null, plan: auth.account?.plan ?? null },
       expiresAt: auth.expiresAt, error: auth.expiresAt <= this.now() ? 'CODEX_TOKEN_EXPIRED' : null,
-      attempt: this.safeAttempt() };
+      attempt: this.safeAttempt(), models: this.modelSync?.state() ?? null };
+  }
+
+  async refreshModels() {
+    if (!this.modelSync) throw new CodexAuthError('模型同步不可用。', 'CODEX_MODEL_SYNC_FAILED');
+    await this.modelSync.refresh();
+    return this.getState();
   }
 
   safeAttempt() {
@@ -136,7 +144,7 @@ export class AuthController {
 }
 
 export function authRpcHandler(controller) {
-  const methods = new Map([['state', () => controller.getState()], ['refresh', () => controller.refresh()], ['quota', () => controller.quota()], ['login', () => controller.startLogin()], ['cancel', () => controller.cancelLogin()]]);
+  const methods = new Map([['state', () => controller.getState()], ['refresh', () => controller.refresh()], ['quota', () => controller.quota()], ['login', () => controller.startLogin()], ['cancel', () => controller.cancelLogin()], ['models', () => controller.refreshModels()]]);
   return async (endpoint, payload) => {
     if (!methods.has(endpoint) || payload === null || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).length) {
       return { ok: false, error: { code: 'CODEX_BAD_REQUEST', message: '无法识别的授权操作。', details: {} } };

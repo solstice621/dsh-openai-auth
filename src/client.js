@@ -27,6 +27,8 @@ window.__ModuleLoader__.load({
       CODEX_ACCOUNT_CHANGED: '账号已变化，请重新读取额度。',
       CODEX_LOGIN_FAILED: '登录未完成，请重试。',
       CODEX_SERVER_EXITED: 'Codex 连接中断，请重试。',
+      CODEX_MODEL_SYNC_FAILED: '模型同步失败，已保留当前目录。请检查 Codex 版本和网络后重试。',
+      CODEX_CONNECTION_DISABLED: '请先启用 Codex 连接，再刷新模型。',
     };
     const date = value => value ? new Date(value).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '未知';
     const duration = mins => mins == null ? '额度窗口' : mins >= 1440 ? `${Math.round(mins / 1440)} 天额度` : mins >= 60 ? `${Math.round(mins / 60)} 小时额度` : `${mins} 分钟额度`;
@@ -91,6 +93,13 @@ window.__ModuleLoader__.load({
         }, 1500);
         return () => window.clearInterval(timer);
       }, [state?.attempt?.phase]);
+      React.useEffect(() => {
+        if (!state?.models) return;
+        // Poll only local display state. This does not trigger a catalog request
+        // unless the login identity changed; network discovery has its own TTL.
+        const timer = window.setInterval(() => { sync().catch(() => {}); }, state.models.refreshing ? 1500 : 30000);
+        return () => window.clearInterval(timer);
+      }, [state?.models?.refreshing]);
 
       async function operation(method) {
         setBusy(method); setError(null); setNotice(null);
@@ -98,6 +107,7 @@ window.__ModuleLoader__.load({
         try {
           const value = await call(method); accept(value);
           if (method === 'refresh') setNotice('授权已刷新。');
+          if (method === 'models') setNotice(`模型目录已同步，共 ${value.models?.totalModels ?? 0} 个模型。`);
           if (method === 'cancel') setNotice('已取消本次登录。');
           if (method === 'login' && value.attempt?.authUrl) window.open(value.attempt.authUrl, '_blank', 'noopener,noreferrer');
         } catch (err) { setError(errors[err.code] ?? '操作未完成，请检查网络后重试。'); }
@@ -110,6 +120,7 @@ window.__ModuleLoader__.load({
           const accepted = await form.set('enabled', target);
           if (!accepted) throw Error('settings write failed');
           setNotice(target ? 'Codex 连接已启用。' : '已停用 Harness 的 Codex 连接。');
+          await sync();
         } catch { setError('设置未保存，请重新打开此页面后重试。'); }
         finally { if (active.current) setBusy(null); }
       }
@@ -139,6 +150,13 @@ window.__ModuleLoader__.load({
           state?.attempt?.phase === 'expired' && h('p', { className: 'notice error', role: 'alert' }, '登录等待已超时，请重新发起。')),
         error && h('p', { className: 'notice error', role: 'alert' }, error),
         notice && h('p', { className: 'notice', role: 'status' }, notice),
+        h('div', { className: 'card' },
+          h('div', { className: 'row' }, h('h3', null, '模型自动同步'), h('button', { className: 'text-button', disabled: locked || !enabled || !state?.connected || waiting || state?.models?.refreshing, onClick: () => operation('models') }, busy === 'models' || state?.models?.refreshing ? '同步中…' : '刷新模型')),
+          h('p', { className: 'muted small', style: { marginTop: 14 } }, !enabled ? '连接已停用，自动同步已暂停。' : `启动时同步，每 ${state?.models?.intervalMinutes ?? 360} 分钟自动刷新；账号变化后重新同步。`),
+          state?.models && h('p', { className: 'small muted', style: { marginTop: 8 } }, `当前 ${state.models.totalModels} 个模型 · ${state.models.source === 'codex' ? '官方 Codex 目录' : state.models.source === 'cache' ? '最近成功的缓存' : '内置备用目录'} · 最近同步：${date(state.models.lastSyncAt)}`),
+          state?.models?.error && h('p', { className: 'small muted' }, errors[state.models.error] ?? '同步未完成，当前模型目录仍可使用。'),
+          state?.models?.cacheSaved === false && h('p', { className: 'small muted' }, '模型目录已更新，但缓存未保存；重启后会重新同步。'),
+          h('p', { className: 'small muted', style: { marginTop: 8 } }, '目录取决于 Codex 客户端和账号。新模型沿用当前 Responses 协议；新协议仍需升级插件。')),
         h('div', { className: 'card' },
           h('div', { className: 'row' }, h('h3', null, '订阅额度'), h('button', { className: 'text-button', disabled: locked || !state?.connected || waiting, onClick: loadQuota }, busy === 'quota' ? '读取中…' : '刷新额度')),
           quota?.buckets?.length ? quota.buckets.map(bucket => h('div', { className: 'bucket', key: bucket.id },
