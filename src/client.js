@@ -169,13 +169,6 @@ window.__ModuleLoader__.load({
         error && h('p', { className: 'notice error', role: 'alert' }, error),
         notice && h('p', { className: 'notice', role: 'status' }, notice),
         h('div', { className: 'card' },
-          h('div', { className: 'row' }, h('h3', null, '模型自动同步'), h('button', { className: 'text-button', disabled: locked || !enabled || !state?.connected || waiting || state?.models?.refreshing, onClick: () => operation('models') }, busy === 'models' || state?.models?.refreshing ? '同步中…' : '刷新模型')),
-          h('p', { className: 'muted small', style: { marginTop: 14 } }, !enabled ? '连接已停用，自动同步已暂停。' : `启动时同步，每 ${state?.models?.intervalMinutes ?? 360} 分钟自动刷新；账号变化后重新同步。`),
-          state?.models && h('p', { className: 'small muted', style: { marginTop: 8 } }, `当前 ${state.models.totalModels} 个模型 · ${state.models.source === 'codex' ? '官方 Codex 目录' : state.models.source === 'cache' ? '最近成功的缓存' : '内置备用目录'} · 最近同步：${date(state.models.lastSyncAt)}`),
-          state?.models?.error && h('p', { className: 'small muted' }, errors[state.models.error] ?? '同步未完成，当前模型目录仍可使用。'),
-          state?.models?.cacheSaved === false && h('p', { className: 'small muted' }, '模型目录已更新，但缓存未保存；重启后会重新同步。'),
-          h('p', { className: 'small muted', style: { marginTop: 8 } }, '目录取决于 Codex 客户端和账号。新模型沿用当前 Responses 协议；新协议仍需升级插件。')),
-        h('div', { className: 'card' },
           h('div', { className: 'row' }, h('h3', null, '订阅额度'), h('button', { className: 'text-button', disabled: locked || !state?.connected || waiting, onClick: loadQuota }, busy === 'quota' ? '读取中…' : '刷新额度')),
           quota?.buckets?.length ? quota.buckets.map(bucket => h('div', { className: 'bucket', key: bucket.id },
             quota.buckets.length > 1 && h('p', { className: 'small muted' }, bucket.name),
@@ -184,6 +177,13 @@ window.__ModuleLoader__.load({
           quota && h('p', { className: 'small muted', style: { marginTop: 14 } },
             `${quota.cached ? '上次更新' : '更新于'} ${date(quota.fetchedAt)} · 与本机 Codex 共享额度`,
             quota.cached && busy === 'quota' ? ' · 正在刷新…' : quota.cached ? ' · 刷新未完成' : '')),
+        state?.showModelSync !== false && h('div', { className: 'card' },
+          h('div', { className: 'row' }, h('h3', null, '模型自动同步'), h('button', { className: 'text-button', disabled: locked || !enabled || !state?.connected || waiting || state?.models?.refreshing, onClick: () => operation('models') }, busy === 'models' || state?.models?.refreshing ? '同步中…' : '刷新模型')),
+          h('p', { className: 'muted small', style: { marginTop: 14 } }, !enabled ? '连接已停用，自动同步已暂停。' : `启动时同步，每 ${state?.models?.intervalMinutes ?? 360} 分钟自动刷新；账号变化后重新同步。`),
+          state?.models && h('p', { className: 'small muted', style: { marginTop: 8 } }, `当前 ${state.models.totalModels} 个模型 · ${state.models.source === 'codex' ? '官方 Codex 目录' : state.models.source === 'cache' ? '最近成功的缓存' : '内置备用目录'} · 最近同步：${date(state.models.lastSyncAt)}`),
+          state?.models?.error && h('p', { className: 'small muted' }, errors[state.models.error] ?? '同步未完成，当前模型目录仍可使用。'),
+          state?.models?.cacheSaved === false && h('p', { className: 'small muted' }, '模型目录已更新，但缓存未保存；重启后会重新同步。'),
+          h('p', { className: 'small muted', style: { marginTop: 8 } }, '目录取决于 Codex 客户端和账号。新模型沿用当前 Responses 协议；新协议仍需升级插件。')),
         h('p', { className: 'footer' }, '使用时，在会话模型选择器中选择「OpenAI · Codex 额度」。系统代理切换后需要重启 Harness。'));
     }
 

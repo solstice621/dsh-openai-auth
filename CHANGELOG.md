@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2
+
+- Move the model-catalog card below the quota card, so the account and quota are what the page opens on.
+- Add `showModelSync` (default `true`); set it to `false` to drop the model-catalog card entirely. The preference is reported through `state` rather than read from raw configuration.
+
 ## 0.3.1
 
 - Show the last successful quota reading immediately when the settings page opens, then refresh it behind the user instead of leaving the card empty while the Codex app-server starts.

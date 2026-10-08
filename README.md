@@ -46,6 +46,7 @@
 ## 兼容性与前提
 
 - 已验证：**macOS + DeepSeek Harness Desktop `0.2.0-rc.2` + Codex CLI `0.154.0`**。
+- 设置页顺序：账号连接 → 订阅额度 → 模型自动同步；`showModelSync: false` 可隐藏最后一张卡片。
 - 插件当前绑定 Harness `0.2.0-rc.2` 的接口版本；其他 Harness 版本尚未验证。
 - 需要本机安装官方 Codex CLI，并有可用的 ChatGPT / Codex 账号。
 - 当前支持 **file 存储**的 Codex ChatGPT 登录，即 `CODEX_HOME/auth.json` 或默认的 `~/.codex/auth.json`。
@@ -59,7 +60,7 @@
 3. 输入以下 GitHub 包地址，或从 [Releases](https://github.com/solstice621/dsh-openai-auth/releases) 下载 `.tgz` 后填写其绝对路径：
 
    ```text
-   github:solstice621/dsh-openai-auth#v0.3.1
+   github:solstice621/dsh-openai-auth#v0.3.2
    ```
 
 4. 安装并启用插件，然后完全退出并重新打开 Harness。

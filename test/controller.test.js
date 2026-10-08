@@ -164,3 +164,11 @@ test('a quota read survives an unwritable cache and a missing cache never breaks
   const bare = create();
   assert.equal(await bare.cachedQuota(), null);
 });
+
+test('the settings layout preference is reported without exposing raw configuration', async () => {
+  assert.equal((await create().getState()).showModelSync, true);
+  assert.equal((await create({ showModelSync: false }).getState()).showModelSync, false);
+  const offline = create({ showModelSync: false, source: { ...source(), read: async () => { throw Object.assign(Error('none'), { code: 'CODEX_AUTH_REQUIRED' }); } } });
+  assert.equal((await offline.getState()).showModelSync, false);
+  assert.equal((await authRpcHandler(create({ showModelSync: false }))('state', {})).value.showModelSync, false);
+});

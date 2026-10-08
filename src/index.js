@@ -19,6 +19,7 @@ export const Config = Schema.object({
   codexHome: Schema.string().description('Codex login directory; defaults to CODEX_HOME or ~/.codex'),
   codexCommand: Schema.string().default('codex').description('Official Codex CLI executable; an absolute path is useful on desktop'),
   refreshSkewSeconds: Schema.number().min(0).max(3600).default(300),
+  showModelSync: Schema.boolean().default(true).description('Show the model-catalog card under the quota card on the settings page'),
   modelRefreshMinutes: Schema.number().min(5).max(10080).default(360).description('Automatically refresh the model catalog at this interval'),
   modelDiscoveryCommand: Schema.string().description('Optional official Codex executable for model discovery; defaults to codexCommand'),
   modelCachePath: Schema.string().description('Optional model metadata cache path; defaults to ~/.dsh/cache/dsh-openai-auth'),
@@ -118,7 +119,8 @@ export async function apply(ctx, config) {
   });
   ctx.effect(() => () => modelSync.dispose());
   const controller = new AuthController({ source, enabled, modelSync, beforeAuth: () => bridge.ensure(), childEnvironment,
-    quotaStore: quotaCacheStore(config.quotaCachePath ?? quotaCacheFile(source.codexHome)) });
+    quotaStore: quotaCacheStore(config.quotaCachePath ?? quotaCacheFile(source.codexHome)),
+    showModelSync: config.showModelSync !== false });
   ctx.effect(() => () => controller.dispose());
   const handle = authRpcHandler(controller);
   // Exact /api routes inherit Harness's authenticated Host/Origin boundary and

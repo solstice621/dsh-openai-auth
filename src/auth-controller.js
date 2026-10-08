@@ -21,20 +21,22 @@ export function normalizeQuota(result, expectedAccountId) {
 }
 
 export class AuthController {
-  constructor({ source, enabled = true, beforeAuth, childEnvironment, modelSync, quotaStore, createServer = options => new CodexAppServer(options), now = Date.now }) {
-    Object.assign(this, { source, enabled, beforeAuth, childEnvironment, modelSync, quotaStore, createServer, now });
+  constructor({ source, enabled = true, beforeAuth, childEnvironment, modelSync, quotaStore, showModelSync = true, createServer = options => new CodexAppServer(options), now = Date.now }) {
+    Object.assign(this, { source, enabled, beforeAuth, childEnvironment, modelSync, quotaStore, showModelSync, createServer, now });
   }
 
   async getState() {
     const enabled = typeof this.enabled === 'function' ? this.enabled() : this.enabled;
+    // A layout preference, reported so the page never has to read the raw config.
+    const showModelSync = this.showModelSync !== false;
     let auth;
     try { auth = await this.source.read(); } catch (error) {
       this.modelSync?.observeAccount(undefined);
-      return { enabled, connected: false, account: null, expiresAt: null, error: error.code ?? 'CODEX_AUTH_REQUIRED', attempt: this.safeAttempt(), models: this.modelSync?.state() ?? null };
+      return { enabled, showModelSync, connected: false, account: null, expiresAt: null, error: error.code ?? 'CODEX_AUTH_REQUIRED', attempt: this.safeAttempt(), models: this.modelSync?.state() ?? null };
     }
     if (this.modelSync?.observeAccount(auth.account.id)) this.modelSync.tick(true).catch(() => {});
     // Explicit allowlist: no access/id/refresh token, raw document, or account id.
-    return { enabled, connected: auth.expiresAt > this.now(),
+    return { enabled, showModelSync, connected: auth.expiresAt > this.now(),
       account: { key: createHash('sha256').update(auth.account?.id ?? '').digest('hex').slice(0, 16), email: auth.account?.email ?? null, plan: auth.account?.plan ?? null },
       expiresAt: auth.expiresAt, error: auth.expiresAt <= this.now() ? 'CODEX_TOKEN_EXPIRED' : null,
       attempt: this.safeAttempt(), models: this.modelSync?.state() ?? null };
