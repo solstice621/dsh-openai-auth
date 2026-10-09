@@ -21,8 +21,9 @@ export function normalizeQuota(result, expectedAccountId) {
 }
 
 export class AuthController {
-  constructor({ source, enabled = true, beforeAuth, childEnvironment, modelSync, quotaStore, showModelSync = true, createServer = options => new CodexAppServer(options), now = Date.now }) {
-    Object.assign(this, { source, enabled, beforeAuth, childEnvironment, modelSync, quotaStore, showModelSync, createServer, now });
+  constructor({ source, enabled = true, beforeAuth, childEnvironment, modelSync, quotaStore, quotaRefreshMinutes = 5, showModelSync = true, createServer = options => new CodexAppServer(options), now = Date.now }) {
+    Object.assign(this, { source, enabled, beforeAuth, childEnvironment, modelSync, quotaStore, quotaRefreshMinutes, showModelSync, createServer, now });
+    this.quotaAbort = new AbortController();
   }
 
   async getState() {
@@ -32,11 +33,11 @@ export class AuthController {
     let auth;
     try { auth = await this.source.read(); } catch (error) {
       this.modelSync?.observeAccount(undefined);
-      return { enabled, showModelSync, connected: false, account: null, expiresAt: null, error: error.code ?? 'CODEX_AUTH_REQUIRED', attempt: this.safeAttempt(), models: this.modelSync?.state() ?? null };
+      return { enabled, showModelSync, quotaRefreshMinutes: this.quotaRefreshMinutes, connected: false, account: null, expiresAt: null, error: error.code ?? 'CODEX_AUTH_REQUIRED', attempt: this.safeAttempt(), models: this.modelSync?.state() ?? null };
     }
     if (this.modelSync?.observeAccount(auth.account.id)) this.modelSync.tick(true).catch(() => {});
     // Explicit allowlist: no access/id/refresh token, raw document, or account id.
-    return { enabled, showModelSync, connected: auth.expiresAt > this.now(),
+    return { enabled, showModelSync, quotaRefreshMinutes: this.quotaRefreshMinutes, connected: auth.expiresAt > this.now(),
       account: { key: createHash('sha256').update(auth.account?.id ?? '').digest('hex').slice(0, 16), email: auth.account?.email ?? null, plan: auth.account?.plan ?? null },
       expiresAt: auth.expiresAt, error: auth.expiresAt <= this.now() ? 'CODEX_TOKEN_EXPIRED' : null,
       attempt: this.safeAttempt(), models: this.modelSync?.state() ?? null };
@@ -55,7 +56,9 @@ export class AuthController {
   }
 
   async server(onNotification) {
+    if (this.disposed) throw new CodexAuthError('插件已停用。', 'CODEX_CANCELLED');
     await this.beforeAuth();
+    if (this.disposed) throw new CodexAuthError('插件已停用。', 'CODEX_CANCELLED');
     const server = this.createServer({ codexHome: this.source.codexHome, codexCommand: this.source.codexCommand, env: this.childEnvironment(), onNotification });
     this.servers ??= new Set(); this.servers.add(server);
     try {
@@ -75,19 +78,53 @@ export class AuthController {
     return this.getState();
   }
 
-  async quota() {
+  assertQuotaActive() {
+    if (this.disposed) throw new CodexAuthError('插件已停用。', 'CODEX_CANCELLED');
+    if ((typeof this.enabled === 'function' ? this.enabled() : this.enabled) === false) {
+      throw new CodexAuthError('请先启用 Codex 连接。', 'CODEX_CONNECTION_DISABLED');
+    }
+  }
+
+  quota() {
+    try { this.assertQuotaActive(); } catch (error) { return Promise.reject(error); }
+    // Opening the page and a background tick share the same official RPC.
+    if (!this.quotaPending) {
+      this.quotaPending = this.readQuota();
+      this.quotaPending.finally(() => { this.quotaPending = undefined; }).catch(() => {});
+    }
+    return this.quotaPending;
+  }
+
+  async readQuota() {
     const before = await this.source.read();
+    this.assertQuotaActive();
     const server = await this.server();
     try {
+      this.assertQuotaActive();
       const account = await server.request('account/read', { refreshToken: false });
       if (account.account?.type !== 'chatgpt') throw new CodexAuthError('请使用 ChatGPT 登录 Codex。', 'CODEX_AUTH_REQUIRED');
+      if (account.account.id && account.account.id !== before.account.id) throw new CodexAuthError('账号已变化，请重新读取额度。', 'CODEX_ACCOUNT_CHANGED');
       const result = await server.request('account/rateLimits/read');
       const after = await this.source.read();
+      this.assertQuotaActive();
       if (before.account.id !== after.account.id) throw new CodexAuthError('账号已变化，请重新读取额度。', 'CODEX_ACCOUNT_CHANGED');
       const value = { buckets: normalizeQuota(result, after.account.id), fetchedAt: this.now() };
-      // Remember it for the next page load; a failed write never fails the read.
-      try { await this.quotaStore?.write({ version: 1, accountKey: accountKey(after.account.id), ...value }); } catch { /* cache only */ }
-      return value;
+      // Commit only while this controller and account are still current.
+      // A failed cache write never fails an otherwise successful quota read.
+      try {
+        await this.quotaStore?.write({ version: 1, accountKey: accountKey(after.account.id), ...value }, async () => {
+          try {
+            this.assertQuotaActive();
+            const current = await this.source.read();
+            this.assertQuotaActive();
+            return current.account.id === after.account.id;
+          } catch { return false; }
+        }, this.quotaAbort.signal);
+      } catch { /* cache only */ }
+      const current = await this.source.read();
+      this.assertQuotaActive();
+      if (current.account.id !== after.account.id) throw new CodexAuthError('账号已变化，请重新读取额度。', 'CODEX_ACCOUNT_CHANGED');
+      return { ...value, identity: accountKey(after.account.id).slice(0, 16) };
     } finally { server.close(); this.servers.delete(server); }
   }
 
@@ -97,13 +134,17 @@ export class AuthController {
    * paint the previous quota immediately and refresh behind it.
    */
   async cachedQuota() {
-    if (!this.quotaStore) return null;
-    let auth;
-    try { auth = await this.source.read(); } catch { return null; }
-    const cached = await this.quotaStore.read();
-    // Another account's snapshot is not this account's quota.
-    if (!cached || cached.accountKey !== accountKey(auth.account.id)) return null;
-    return { buckets: cached.buckets, fetchedAt: cached.fetchedAt, cached: true };
+    if (this.disposed || !this.quotaStore) return null;
+    try {
+      const auth = await this.source.read();
+      const cached = await this.quotaStore.read();
+      const current = await this.source.read();
+      // Another account's snapshot is not this account's quota, including an
+      // account switch that happens while the disk read is in progress.
+      const identity = accountKey(current.account.id);
+      if (this.disposed || !cached || accountKey(auth.account.id) !== identity || cached.accountKey !== identity) return null;
+      return { buckets: cached.buckets, fetchedAt: cached.fetchedAt, cached: true, identity: identity.slice(0, 16) };
+    } catch { return null; }
   }
 
   async startLogin() {
@@ -157,6 +198,7 @@ export class AuthController {
 
   dispose() {
     this.disposed = true;
+    this.quotaAbort.abort();
     clearTimeout(this.loginTimer);
     this.attempt = { phase: 'cancelled' };
     for (const server of this.servers ?? []) server.close();

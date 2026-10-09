@@ -172,3 +172,78 @@ test('the settings layout preference is reported without exposing raw configurat
   assert.equal((await offline.getState()).showModelSync, false);
   assert.equal((await authRpcHandler(create({ showModelSync: false }))('state', {})).value.showModelSync, false);
 });
+
+const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
+const quotaServer = (gate, onClose = () => {}) => ({ initialize: async () => {}, close: onClose,
+  request: async method => method === 'account/read' ? { account: { type: 'chatgpt', id: auth.account.id } }
+    : (await gate.promise, { rateLimits: { primary: { usedPercent: 15 } } }),
+});
+
+test('manual and background quota reads share one official server and one cache write', async () => {
+  const gate = deferred(); let opens = 0, writes = 0;
+  const controller = create({ createServer: () => { opens++; return quotaServer(gate); },
+    quotaStore: { write: async () => { writes++; } } });
+  const background = controller.quota(), manual = controller.quota();
+  assert.equal(background, manual);
+  gate.resolve(); const values = await Promise.all([background, manual]);
+  assert.equal(opens, 1); assert.equal(writes, 1); assert.equal(values[0].buckets[0].primary.usedPercent, 15);
+});
+
+test('disabled or disposed quota operations cannot start a CLI or save late replies', async () => {
+  let opens = 0;
+  const disabled = create({ enabled: false, createServer: () => { opens++; } });
+  await assert.rejects(disabled.quota(), error => error.code === 'CODEX_CONNECTION_DISABLED');
+  assert.equal(opens, 0);
+  const gate = deferred(), started = deferred(); let writes = 0, closed = 0;
+  const controller = create({ createServer: () => { started.resolve(); return quotaServer(gate, () => { closed++; }); },
+    quotaStore: { write: async () => { writes++; } } });
+  const pending = controller.quota(); await started.promise;
+  controller.dispose(); gate.resolve();
+  await assert.rejects(pending, error => error.code === 'CODEX_CANCELLED');
+  assert.equal(writes, 0); assert.ok(closed > 0);
+  await assert.rejects(controller.quota(), error => error.code === 'CODEX_CANCELLED');
+});
+
+test('a failed coalesced quota request can retry without destroying the existing snapshot', async () => {
+  let requests = 0, writes = 0;
+  const controller = create({ createServer: () => ({ initialize: async () => {}, close: () => {},
+    request: async method => { if (method === 'account/read') return { account: { type: 'chatgpt' } };
+      if (++requests === 1) throw Error('unreachable');
+      return { rateLimits: { primary: { usedPercent: 5 } } }; } }),
+    quotaStore: { write: async () => { writes++; } } });
+  await assert.rejects(controller.quota()); assert.equal(writes, 0);
+  await controller.quota(); assert.equal(writes, 1); assert.equal(requests, 2);
+});
+
+test('the quota interval is display-safe configuration and defaults to five minutes', async () => {
+  assert.equal((await create().getState()).quotaRefreshMinutes, 5);
+  assert.equal((await create({ quotaRefreshMinutes: 10 }).getState()).quotaRefreshMinutes, 10);
+});
+
+test('disposal during proxy preparation cannot start a later Codex child', async () => {
+  const gate = deferred(), preparing = deferred(); let opens = 0;
+  const controller = create({ beforeAuth: async () => { preparing.resolve(); await gate.promise; },
+    createServer: () => { opens++; return quotaServer(gate); } });
+  const pending = controller.quota(); await preparing.promise;
+  controller.dispose(); gate.resolve();
+  await assert.rejects(pending, error => error.code === 'CODEX_CANCELLED'); assert.equal(opens, 0);
+});
+
+test('quota display identities match the safe state identity, never the raw account id', async () => {
+  let value;
+  const gate = deferred(); gate.resolve();
+  const controller = create({ createServer: () => quotaServer(gate),
+    quotaStore: { write: async entry => { value = entry; }, read: async () => value } });
+  const live = await controller.quota(), cached = await controller.cachedQuota();
+  assert.equal(live.identity, (await controller.getState()).account.key);
+  assert.equal(cached.identity, live.identity);
+  assert.equal(value.accountKey.length, 64);
+  assert.ok(!JSON.stringify(live).includes(auth.account.id));
+});
+
+test('an account switch during a disk-only quota read cannot return the previous snapshot', async () => {
+  let reads = 0;
+  const controller = create({ source: { ...source(), read: async () => ({ ...auth, account: { ...auth.account, id: ++reads === 1 ? auth.account.id : 'new-account' } }) },
+    quotaStore: { read: async () => ({ accountKey: accountKey(auth.account.id), fetchedAt: 1234, buckets: [{ id: 'codex', primary: { usedPercent: 10 } }] }) } });
+  assert.equal(await controller.cachedQuota(), null);
+});

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.3-local.1 (local enhancement, not published)
+
+- Refresh quota every five minutes in the backend, regardless of whether settings are open; configure with `quotaRefreshMinutes`.
+- Reuse account-scoped snapshots across restarts, coalesce manual/background requests, and stop timers/CLI on unload.
+- Preserve the last successful reading on errors and prevent stale account or disposed requests from committing cache data.
+- Observe newer backend snapshots on the settings page without extra quota network calls.
+
 ## 0.3.2
 
 - Move the model-catalog card below the quota card, so the account and quota are what the page opens on.

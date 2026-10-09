@@ -9,7 +9,8 @@ import { AuthController, authRpcHandler } from './auth-controller.js';
 import { clientRequestSchema } from '@deepseek-ai/dsh-client-connection';
 import { supplementCodexModels } from './model-catalog.js';
 import { ModelSync, modelCacheStore } from './model-sync.js';
-import { quotaCacheFile, quotaCacheStore } from './quota-cache.js';
+import { accountKey, quotaCacheFile, quotaCacheStore } from './quota-cache.js';
+import { QuotaSync } from './quota-sync.js';
 
 export const name = 'dsh-openai-auth';
 export const inject = ['llm', 'connection'];
@@ -24,6 +25,7 @@ export const Config = Schema.object({
   modelDiscoveryCommand: Schema.string().description('Optional official Codex executable for model discovery; defaults to codexCommand'),
   modelCachePath: Schema.string().description('Optional model metadata cache path; defaults to ~/.dsh/cache/dsh-openai-auth'),
   quotaCachePath: Schema.string().description('Optional last-quota cache path; defaults to ~/.dsh/cache/dsh-openai-auth'),
+  quotaRefreshMinutes: Schema.number().min(1).max(1440).default(5).description('Refresh quota in the backend even while settings are closed'),
   useSystemProxy: Schema.boolean().default(process.platform === 'darwin').description('Use the active macOS HTTP proxy when the GUI Host has no explicit proxy'),
 });
 
@@ -120,6 +122,7 @@ export async function apply(ctx, config) {
   ctx.effect(() => () => modelSync.dispose());
   const controller = new AuthController({ source, enabled, modelSync, beforeAuth: () => bridge.ensure(), childEnvironment,
     quotaStore: quotaCacheStore(config.quotaCachePath ?? quotaCacheFile(source.codexHome)),
+    quotaRefreshMinutes: config.quotaRefreshMinutes ?? 5,
     showModelSync: config.showModelSync !== false });
   ctx.effect(() => () => controller.dispose());
   const handle = authRpcHandler(controller);
@@ -140,7 +143,14 @@ export async function apply(ctx, config) {
     if (!enabled()) throw new LlmError('Codex 连接已停用，请在设置 → OpenAI / Codex 中启用。', 'CODEX_CONNECTION_DISABLED');
     await bridge.ensure();
   }, () => modelSync.models));
-  // Model discovery never delays startup or replaces a working catalog on error.
+  const quotaSync = new QuotaSync({ enabled,
+    readIdentity: async () => accountKey((await source.read()).account.id),
+    readCached: () => controller.cachedQuota(), refresh: () => controller.quota(),
+    intervalMinutes: config.quotaRefreshMinutes ?? 5 });
+  ctx.effect(() => () => quotaSync.dispose());
+  // Both loops belong to the backend and never delay startup. Cached data is
+  // retained on network failure; unloading the plugin stops its timers/CLI.
+  quotaSync.start().catch(() => ctx.logger.warn('Codex quota sync failed; the last snapshot remains available.'));
   modelSync.start().catch(() => ctx.logger.warn('Codex model sync failed; the current catalog remains available.'));
   ctx.logger.info('Codex subscription provider is available. Authentication remains managed by the local Codex CLI.');
 }

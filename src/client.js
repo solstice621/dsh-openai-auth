@@ -55,6 +55,7 @@ window.__ModuleLoader__.load({
       const enabled = formState.value?.enabled ?? state?.enabled ?? true;
       const active = React.useRef(true);
       const previousAccount = React.useRef(null);
+      const latestQuota = React.useRef(null);
 
       async function call(method) {
         const result = await rpc(method);
@@ -64,25 +65,31 @@ window.__ModuleLoader__.load({
       function accept(value) {
         if (!active.current) return;
         const identity = value.account?.key ?? null;
-        if (previousAccount.current !== identity) { setQuota(null); setQuotaError(null); previousAccount.current = identity; }
+        if (previousAccount.current !== identity) { latestQuota.current = null; setQuota(null); setQuotaError(null); previousAccount.current = identity; }
         setState(value);
       }
+      function acceptQuota(value, identity) {
+        if (!active.current || previousAccount.current !== identity || !value?.buckets?.length || (value.identity && value.identity !== identity)) return false;
+        // A late cache reply must not replace a newer manual refresh or another
+        // account's display. Equal timestamps keep the existing live reading.
+        if (latestQuota.current && value.fetchedAt <= latestQuota.current.fetchedAt) return true;
+        latestQuota.current = value; setQuota(value); setQuotaError(null);
+        return true;
+      }
       async function loadQuota() {
+        const identity = previousAccount.current;
         if (active.current) { setBusy('quota'); setQuotaError(null); }
         // A cached reading stays on screen while the refresh runs; only a failure
         // with nothing to show falls back to the placeholder text.
-        try { const value = await call('quota'); if (active.current) setQuota(value); }
-        catch (err) { if (active.current) setQuotaError(errors[err.code] ?? '额度读取失败，请检查网络后重试。'); }
+        try { acceptQuota(await call('quota'), identity); }
+        catch (err) { if (active.current && previousAccount.current === identity) setQuotaError(errors[err.code] ?? '额度读取失败，请检查网络后重试。'); }
         finally { if (active.current) setBusy(null); }
       }
       // Paint the previous reading first, then refresh it behind the user.
       async function showCachedQuota() {
-        try {
-          const value = await call('cached');
-          if (!active.current || !value?.buckets?.length) return false;
-          setQuota(value);
-          return true;
-        } catch { return false; }
+        const identity = previousAccount.current;
+        try { return acceptQuota(await call('cached'), identity); }
+        catch { return false; }
       }
       async function sync() { const value = await call('state'); accept(value); return value; }
       React.useEffect(() => {
@@ -118,10 +125,25 @@ window.__ModuleLoader__.load({
         const timer = window.setInterval(() => { sync().catch(() => {}); }, state.models.refreshing ? 1500 : 30000);
         return () => window.clearInterval(timer);
       }, [state?.models?.refreshing]);
+      React.useEffect(() => {
+        if (!enabled || !state?.connected || !state?.account?.key) return;
+        let running = false, cancelled = false;
+        const identity = state.account.key;
+        // This is a disk-only RPC. Network polling continues in the backend
+        // even after this page unmounts, and does not depend on this timer.
+        const timer = window.setInterval(async () => {
+          if (running || cancelled) return;
+          running = true;
+          try { const value = await call('cached'); if (!cancelled) acceptQuota(value, identity); }
+          catch { /* preserve the current quota on local/RPC errors */ }
+          finally { running = false; }
+        }, 30000);
+        return () => { cancelled = true; window.clearInterval(timer); };
+      }, [enabled, state?.connected, state?.account?.key]);
 
       async function operation(method) {
         setBusy(method); setError(null); setNotice(null);
-        if (method === 'login') { setQuota(null); setQuotaError(null); }
+        if (method === 'login') { latestQuota.current = null; setQuota(null); setQuotaError(null); }
         try {
           const value = await call(method); accept(value);
           if (method === 'refresh') setNotice('授权已刷新。');
@@ -176,7 +198,8 @@ window.__ModuleLoader__.load({
           quota?.buckets?.length && quotaError && h('p', { className: 'small muted', style: { marginTop: 10 }, role: 'alert' }, quotaError),
           quota && h('p', { className: 'small muted', style: { marginTop: 14 } },
             `${quota.cached ? '上次更新' : '更新于'} ${date(quota.fetchedAt)} · 与本机 Codex 共享额度`,
-            quota.cached && busy === 'quota' ? ' · 正在刷新…' : quota.cached ? ' · 刷新未完成' : '')),
+            quota.cached && busy === 'quota' ? ' · 正在刷新…' : '',
+            enabled ? ` · 后台每 ${state?.quotaRefreshMinutes ?? 5} 分钟自动刷新` : ' · 后台刷新已暂停')),
         state?.showModelSync !== false && h('div', { className: 'card' },
           h('div', { className: 'row' }, h('h3', null, '模型自动同步'), h('button', { className: 'text-button', disabled: locked || !enabled || !state?.connected || waiting || state?.models?.refreshing, onClick: () => operation('models') }, busy === 'models' || state?.models?.refreshing ? '同步中…' : '刷新模型')),
           h('p', { className: 'muted small', style: { marginTop: 14 } }, !enabled ? '连接已停用，自动同步已暂停。' : `启动时同步，每 ${state?.models?.intervalMinutes ?? 360} 分钟自动刷新；账号变化后重新同步。`),

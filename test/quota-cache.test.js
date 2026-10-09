@@ -63,3 +63,24 @@ test('cached buckets are sanitized and unusable windows are dropped', () => {
   assert.throws(() => normalizeCachedBuckets('nope'), /Invalid quota cache/);
   assert.throws(() => normalizeCachedBuckets(new Array(21).fill({ primary: { usedPercent: 1 } })), /Invalid quota cache/);
 });
+
+test('a cancelled cache commit retains the last successful on-disk snapshot', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'codex-quota-'));
+  const store = quotaCacheStore(join(dir, 'quota.json'));
+  await store.write({ version: 1, accountKey: accountKey('a'), fetchedAt: 1234, buckets: buckets() });
+  await store.write({ version: 1, accountKey: accountKey('a'), fetchedAt: 9999, buckets: buckets() }, async () => false);
+  assert.equal((await store.read()).fetchedAt, 1234);
+});
+
+test('an abort during the asynchronous commit guard cannot replace the snapshot', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'codex-quota-'));
+  const store = quotaCacheStore(join(dir, 'quota.json'));
+  await store.write({ version: 1, accountKey: accountKey('a'), fetchedAt: 1234, buckets: buckets() });
+  let ready, release;
+  const waiting = new Promise(resolve => { ready = resolve; });
+  const gate = new Promise(resolve => { release = resolve; });
+  const abort = new AbortController();
+  const pending = store.write({ version: 1, accountKey: accountKey('a'), fetchedAt: 9999, buckets: buckets() }, async () => { ready(); await gate; return true; }, abort.signal);
+  await waiting; abort.abort(); release(); await pending;
+  assert.equal((await store.read()).fetchedAt, 1234);
+});

@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { readFile, mkdir, writeFile, rename, rm } from 'node:fs/promises';
+import { readFile, mkdir, writeFile, rm } from 'node:fs/promises';
+import { renameSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -54,11 +55,13 @@ export function quotaCacheStore(path) {
         return { version: 1, accountKey: data.accountKey, fetchedAt: data.fetchedAt, buckets };
       } catch { return null; }
     },
-    async write(value) {
+    async write(value, canCommit = () => true, signal) {
       const temporary = `${path}.${randomUUID()}.tmp`;
       await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-      try { await writeFile(temporary, JSON.stringify(value), { mode: 0o600 }); await rename(temporary, path); }
-      finally { await rm(temporary, { force: true }); }
+      try {
+        await writeFile(temporary, JSON.stringify(value), { mode: 0o600 });
+        if (!signal?.aborted && await canCommit() && !signal?.aborted) renameSync(temporary, path);
+      } finally { await rm(temporary, { force: true }); }
     },
     async clear() { await rm(path, { force: true }); },
   };
