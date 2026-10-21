@@ -1,5 +1,22 @@
 # Validation
 
+## Harness 0.2.1-rc.2 compatibility — 2026-10-19
+
+Version `0.3.3-local.2` adds an explicit peer-dependency alternative for Harness `0.2.1-rc.2` and its bundled pi-ai `1.1.0`, while retaining `0.2.0-rc.2` / `0.87.1` support. The old exact peer constraints caused the Desktop loader to reject the package, leaving no settings section and returning HTTP 404 from its API routes.
+
+Validated on macOS with the actual Desktop profile, bundled Node.js `24.21.0`, and official Codex CLI `0.162.0-alpha.17.2`:
+
+- All 59 current unit tests passed.
+- The plugin entry point and native adapter loaded against the new Desktop's actual dependencies and resolved GPT-6.1 Sol.
+- Installation through Desktop's plugin manager restored the settings section without changing existing account credentials or plugin configuration.
+- The real settings page displayed the connected account and quota; manual quota and model refresh completed, with nine models shown.
+- Authenticated `state`, `cached`, `quota`, and `models` calls on the running Desktop backend returned successful application results.
+- An exact `gpt-6.1-sol` request through the registered `codex-subscription` provider returned `OK`, committed its streamed assistant message, and completed the turn. The original default model was restored afterward.
+
+No browser re-login, account switch, tool-call replay, Windows/Linux check, or support for other Harness versions is claimed by this compatibility check.
+
+## Original 0.3.0 validation
+
 Validated on 2026-10-08 with macOS, DeepSeek Harness Desktop 0.2.0-rc.2, the bundled Node.js 24.18.1 runtime, official Codex CLI 0.154.0 for account operations, and Desktop-bundled official Codex 0.162.0-alpha.2 for model discovery.
 
 | Check | Result |

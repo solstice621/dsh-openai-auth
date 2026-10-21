@@ -45,15 +45,17 @@
 
 ## 兼容性与前提
 
-- 已验证：**macOS + DeepSeek Harness Desktop `0.2.0-rc.2` + Codex CLI `0.154.0`**。
+- 已验证：**macOS + DeepSeek Harness Desktop `0.2.0-rc.2` / `0.2.1-rc.2`**；账号操作分别验证过 Codex CLI `0.154.0` 和 `0.162.0-alpha.17.2`。
 - 设置页顺序：账号连接 → 订阅额度 → 模型自动同步；`showModelSync: false` 可隐藏最后一张卡片。
-- 插件当前绑定 Harness `0.2.0-rc.2` 的接口版本；其他 Harness 版本尚未验证。
+- 依赖声明仅允许上述两个 Harness 版本，以及配套的 pi-ai `0.87.1` / `1.1.0`；其他版本仍需验证。
 - 需要本机安装官方 Codex CLI，并有可用的 ChatGPT / Codex 账号。
 - 当前支持 **file 存储**的 Codex ChatGPT 登录，即 `CODEX_HOME/auth.json` 或默认的 `~/.codex/auth.json`。
 - Keychain-only 存储、Windows 和 Linux 桌面环境尚未验证；macOS PAC / SOCKS-only 系统代理暂不支持。
 - 额度和模型权限由 OpenAI 管理，模型出现在选择器中不代表该账号一定有调用权限。
 
 ## 安装到桌面版
+
+Harness `0.2.1-rc.2` 需要包含 `0.3.3-local.2` 兼容性修复的提交或本地 `.tgz`。下方已发布的 `v0.3.0` 安装示例适用于 `0.2.0-rc.2`，不包含此修复；旧包会被新宿主标为不兼容，设置入口和接口也不会加载。
 
 1. 安装官方 Codex CLI。在终端运行 `codex login status`，确认使用 ChatGPT 登录；没有登录时可先运行 `codex login`，也可安装后从插件界面登录。
 2. 在 Harness 左侧打开「插件」→「添加插件」。
@@ -186,7 +188,7 @@ npm pack --ignore-scripts
 
 ## English overview
 
-A native bundle and settings plugin for DeepSeek Harness Desktop. It reuses the local official Codex ChatGPT login and subscription usage, adds browser sign-in, managed token refresh, quota windows, a persistent connection toggle, and automatic model discovery with a manual refresh control. Credentials stay managed by Codex; display-safe data only reaches the UI. The current tested target is macOS, Harness Desktop `0.2.0-rc.2`, Codex CLI `0.154.0` for account operations, and Desktop-bundled official Codex `0.162.0-alpha.2` for model discovery. File-based login storage is required. This independent community plugin is not an official OpenAI or DeepSeek product.
+A native bundle and settings plugin for DeepSeek Harness Desktop. It reuses the local official Codex ChatGPT login and subscription usage, adds browser sign-in, managed token refresh, quota windows, a persistent connection toggle, and automatic model discovery with a manual refresh control. Credentials stay managed by Codex; display-safe data only reaches the UI. Tested macOS targets are Harness Desktop `0.2.0-rc.2` with pi-ai `0.87.1`, and Desktop `0.2.1-rc.2` with pi-ai `1.1.0`. Codex account operations have been verified with official CLI `0.154.0` and `0.162.0-alpha.17.2`; the original model-discovery check used `0.162.0-alpha.2`. File-based login storage is required. This independent community plugin is not an official OpenAI or DeepSeek product.
 
 ## 依据与许可
 
