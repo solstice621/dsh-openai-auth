@@ -1,5 +1,11 @@
 # Validation
 
+## Harness 0.2.1-rc.3 dependency compatibility — 2026-10-26
+
+Version `0.3.3-local.3` explicitly admits the four bundled Harness `0.2.1-rc.3` SDK packages, retaining the existing rc.2 and pi-ai alternatives. The official updater archive reproduced four rejected peers before the change and passed all peer checks plus native adapter import/model resolution afterward. The same adapter check passed against the installed `0.2.1-rc.2` SDKs.
+
+All 59 unit tests passed. The patched package was installed on the actual rc.2 desktop profile; its settings panel, quota/model refresh, all four native API routes, and a real GPT-6.1 Sol request returning `OK` with a committed stream end passed. Existing login and the original default model were preserved. The installed Desktop application was not upgraded: rc.3 GUI and authenticated inference have not been exercised.
+
 ## Harness 0.2.1-rc.2 compatibility — 2026-10-19
 
 Version `0.3.3-local.2` adds an explicit peer-dependency alternative for Harness `0.2.1-rc.2` and its bundled pi-ai `1.1.0`, while retaining `0.2.0-rc.2` / `0.87.1` support. The old exact peer constraints caused the Desktop loader to reject the package, leaving no settings section and returning HTTP 404 from its API routes.
