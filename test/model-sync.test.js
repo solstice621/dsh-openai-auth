@@ -53,6 +53,7 @@ test('starts automatically, follows pagination, persists safe metadata, and resp
   state.pages = [{ data: [row('new-1')], nextCursor: 'page-2' }, { data: [row('new-2')], nextCursor: null }];
   await sync.start();
   assert.equal(sync.models.length, 3); assert.equal(sync.state().source, 'codex');
+  assert.deepEqual(sync.state().availableModels, sync.models.map(({ id, name }) => ({ id, name })));
   assert.equal(state.requests[2].params.cursor, 'page-2'); assert.equal(state.opens, state.closes);
   assert(!JSON.stringify(state.writes).includes('private-token')); assert(!JSON.stringify(sync.state()).includes('account-a'));
   await sync.tick(); assert.equal(state.opens, 1);
