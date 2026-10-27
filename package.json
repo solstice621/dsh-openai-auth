@@ -1,6 +1,6 @@
 {
   "name": "dsh-openai-auth",
-  "version": "0.3.3-local.3",
+  "version": "0.3.3-local.5",
   "description": "Use your local Codex ChatGPT login in DeepSeek Harness Desktop",
   "type": "module",
   "license": "MIT",

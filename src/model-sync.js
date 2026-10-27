@@ -53,6 +53,7 @@ export class ModelSync {
   state() {
     return { automatic: true, intervalMinutes: this.intervalMinutes, refreshing: Boolean(this.pending),
       source: this.origin, totalModels: this.models.length, discoveredModels: this.discovered.length,
+      availableModels: this.models.map(({ id, name }) => ({ id, name })),
       lastSyncAt: this.lastSyncAt ?? null, lastAttemptAt: this.lastAttemptAt ?? null,
       nextSyncAt: this.enabled() ? (this.lastAttemptAt ?? this.now()) + this.intervalMinutes * 60000 : null,
       error: this.error ?? null, cacheSaved: this.cacheSaved ?? null };

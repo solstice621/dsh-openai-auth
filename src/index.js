@@ -11,12 +11,14 @@ import { supplementCodexModels } from './model-catalog.js';
 import { ModelSync, modelCacheStore } from './model-sync.js';
 import { accountKey, quotaCacheFile, quotaCacheStore } from './quota-cache.js';
 import { QuotaSync } from './quota-sync.js';
+import { withModelSelection } from './model-selection.js';
 
 export const name = 'dsh-openai-auth';
 export const inject = ['llm', 'connection'];
 export const PROVIDER = 'codex-subscription';
 export const Config = Schema.object({
   enabled: Schema.boolean().default(true).description('Enable the Codex connection in Harness').volatile(),
+  selectedModelIds: Schema.union([Schema.const(null), Schema.array(Schema.string())]).default(null).description('Model ids shown in the conversation picker; null shows all models, [] hides all').volatile(),
   codexHome: Schema.string().description('Codex login directory; defaults to CODEX_HOME or ~/.codex'),
   codexCommand: Schema.string().default('codex').description('Official Codex CLI executable; an absolute path is useful on desktop'),
   refreshSkewSeconds: Schema.number().min(0).max(3600).default(300),
@@ -97,7 +99,7 @@ export function createCodexAdapter(ctx, config = {}, sourceOverride, beforeAuth 
     resolveImageAccess: (attachments, ref) => resolveImageAttachmentAccess(attachments, path => ctx.get('fs')?.processPathFromHostPath(path), ref),
     onReplayDegrade: () => ctx.logger.warn('Codex response history fell back to provider-neutral content.'),
   });
-  return adapter;
+  return withModelSelection(adapter, config);
 }
 
 export async function apply(ctx, config) {
@@ -143,6 +145,7 @@ export async function apply(ctx, config) {
     if (!enabled()) throw new LlmError('Codex 连接已停用，请在设置 → OpenAI / Codex 中启用。', 'CODEX_CONNECTION_DISABLED');
     await bridge.ensure();
   }, () => modelSync.models));
+  ctx.on('loader/volatile-update', () => registration?.replace?.([PROVIDER]));
   const quotaSync = new QuotaSync({ enabled,
     readIdentity: async () => accountKey((await source.read()).account.id),
     readCached: () => controller.cachedQuota(), refresh: () => controller.quota(),

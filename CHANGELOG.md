@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.3-local.5 (local enhancement, not published)
+
+- Add a searchable model checkbox list with automatic saving, select all/none, and restore defaults.
+- Paint checkbox changes immediately while saving and roll back the display if persistence fails.
+- Persist `selectedModelIds` in Harness settings and update the native conversation picker immediately; explicit selections also apply to future catalog refreshes.
+- Keep the full settings catalog and exact model resolution available when picker entries are hidden.
+
 ## 0.3.3-local.1 (local enhancement, not published)
 
 - Refresh quota every five minutes in the backend, regardless of whether settings are open; configure with `quotaRefreshMinutes`.
