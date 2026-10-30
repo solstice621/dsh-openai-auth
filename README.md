@@ -48,8 +48,9 @@
 ## 兼容性与前提
 
 - 当前验证环境：**macOS + DeepSeek Harness Desktop `0.2.1-rc.3` + pi-ai `1.1.0`**，包含原生适配器和桌面模型勾选流程。此前也在 Harness `0.2.0-rc.2` / `0.2.1-rc.2` 验证过；账号操作验证过 Codex CLI `0.154.0` 和 `0.162.0-alpha.17.2`。
+- 另通过 Harness SDK `0.2.1-rc.5` + pi-ai `1.4.0` 的自动化检查：插件导入、缺失接口报错和原生适配器模型枚举；未发送模型请求。
 - 设置页顺序：账号连接 → 订阅额度 → 模型自动同步 → 模型显示；`showModelSync: false` 只隐藏同步卡片，仍可勾选模型。
-- 依赖声明允许 Harness `0.2.0-rc.2` / `0.2.1-rc.2` / `0.2.1-rc.3`，以及配套的 pi-ai `0.87.1` / `1.1.0`；其他版本仍需验证。
+- 不设 Harness 或宿主 SDK 的版本号白名单；保留 SDK peer 依赖并使用宿主提供的版本。启动前检查原生适配器注册和认证 Fetch 接口，缺少接口会明确报错。以上是实测环境，其他版本仍需验证。
 - 需要本机安装官方 Codex CLI，并有可用的 ChatGPT / Codex 账号。
 - 当前支持 **file 存储**的 Codex ChatGPT 登录，即 `CODEX_HOME/auth.json` 或默认的 `~/.codex/auth.json`。
 - Keychain-only 存储、Windows 和 Linux 桌面环境尚未验证；macOS PAC / SOCKS-only 系统代理暂不支持。
@@ -223,7 +224,7 @@ npm pack --ignore-scripts
 
 A native bundle and settings plugin for DeepSeek Harness Desktop. It reuses the local official Codex ChatGPT login, adds browser sign-in and managed token refresh, and refreshes quota and model data in the background. Search and check models in **Settings → OpenAI / Codex → 模型显示** to control the conversation picker; changes apply immediately and persist across restarts. Reset to defaults to include future models automatically; a custom selection or Select all requires selecting newly discovered models manually.
 
-Install from `github:solstice621/dsh-openai-auth#main` for the current compatibility and model-selection updates. The current native adapter and desktop selection flow were verified on macOS with Harness `0.2.1-rc.3` and pi-ai `1.1.0`; earlier checks also cover `0.2.0-rc.2` and `0.2.1-rc.2`. File-based Codex ChatGPT login storage is required. Credentials stay managed by Codex. This independent community plugin is not an official OpenAI or DeepSeek product.
+Install from `github:solstice621/dsh-openai-auth#main` for the current compatibility and model-selection updates. The current native adapter and desktop selection flow were verified on macOS with Harness `0.2.1-rc.3` and pi-ai `1.1.0`; earlier checks also cover `0.2.0-rc.2` and `0.2.1-rc.2`. File-based Codex ChatGPT login storage is required. Credentials stay managed by Codex. Host SDK peer dependencies have no version restriction. Activation checks required host service APIs; module imports still require the SDK exports used by the adapter. This independent community plugin is not an official OpenAI or DeepSeek product.
 
 ## 依据与许可
 

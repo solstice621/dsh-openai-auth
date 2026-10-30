@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Remove host SDK version allowlists while retaining all peer dependencies.
+- Check required host service APIs before starting proxy, account, quota, or model-sync work.
+- Keep tested environments documented separately from activation requirements.
+
 ## 0.3.3-local.5 (local enhancement, not published)
 
 - Add a searchable model checkbox list with automatic saving, select all/none, and restore defaults.

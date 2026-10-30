@@ -12,6 +12,7 @@ import { ModelSync, modelCacheStore } from './model-sync.js';
 import { accountKey, quotaCacheFile, quotaCacheStore } from './quota-cache.js';
 import { QuotaSync } from './quota-sync.js';
 import { withModelSelection } from './model-selection.js';
+import { assertHostCapabilities } from './host-capabilities.js';
 
 export const name = 'dsh-openai-auth';
 export const inject = ['llm', 'connection'];
@@ -103,6 +104,7 @@ export function createCodexAdapter(ctx, config = {}, sourceOverride, beforeAuth 
 }
 
 export async function apply(ctx, config) {
+  assertHostCapabilities(ctx, name);
   const bridge = new SystemProxyBridge({
     enabled: config.useSystemProxy ?? process.platform === 'darwin',
     hostProxied: proxyRouteFor('https://chatgpt.com/backend-api/codex/responses').proxied,
