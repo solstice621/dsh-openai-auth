@@ -6,6 +6,13 @@
 - Check required host service APIs before starting proxy, account, quota, or model-sync work.
 - Keep tested environments documented separately from activation requirements.
 
+## 0.3.3-local.11
+
+- Match Codex model discovery with the official CLI's raw context-window catalog by exact model ID.
+- Restore the last confirmed window for the same account and model, including models that temporarily disappear from discovery.
+- Include exact Codex fallback metadata for GPT-6.1 Terra, GPT-6.2 Sol, and GPT-6.2 Astra on older pi-ai catalogs.
+- Show discovered models with no valid window as pending in settings and keep them unavailable for requests. Retry incomplete metadata after five minutes.
+
 ## 0.3.3-local.5 (local enhancement, not published)
 
 - Add a searchable model checkbox list with automatic saving, select all/none, and restore defaults.

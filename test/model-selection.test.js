@@ -112,12 +112,40 @@ test('searching limits the view without changing choices; hidden and new models 
   assert(page.state.value.selectedModelIds.includes('model-c'));
 });
 
+test('pending limits are visible but unavailable for selection until synchronized', async () => {
+  const page = mount();
+  page.props.models.push({ id: 'model-c', name: 'New model', limitsPending: true });
+  page.search('model-c');
+  assert.match(page.text(), /限额待同步/);
+  assert.equal(page.inputs()[0].props.disabled, true);
+  assert.equal(page.inputs()[0].props.checked, false);
+  await page.click('全选');
+  assert.deepEqual(page.state.value.selectedModelIds, ['model-a', 'model-b']);
+  page.props.models[2].limitsPending = false;
+  page.render();
+  assert.equal(page.inputs()[0].props.disabled, false);
+  await page.check(0, true);
+  assert.deepEqual(page.state.value.selectedModelIds, ['model-a', 'model-b', 'model-c']);
+});
+
+test('an existing selection can be cleared while its window is pending', async () => {
+  const page = mount(['model-c']);
+  page.props.models.push({ id: 'model-c', name: 'New model', limitsPending: true });
+  page.search('model-c');
+  assert.equal(page.inputs()[0].props.checked, true);
+  assert.equal(page.inputs()[0].props.disabled, true);
+  assert.equal(page.button('全不选').props.disabled, false);
+  await page.click('全不选');
+  assert.deepEqual(page.state.value.selectedModelIds, []);
+  assert.equal(page.inputs()[0].props.checked, false);
+});
+
 test('select none, select all, and reset work even when every model is hidden', async () => {
   const page = mount();
   await page.click('全不选');
   assert.deepEqual(page.state.value.selectedModelIds, []);
   assert.deepEqual(page.inputs().map(input => input.props.checked), [false, false]);
-  assert.match(page.text(), /已隐藏此插件的全部模型/);
+  assert.match(page.text(), /已隐藏当前可用的全部模型/);
   await page.click('全选');
   assert.deepEqual(page.state.value.selectedModelIds, ['model-a', 'model-b']);
   await page.click('恢复默认');

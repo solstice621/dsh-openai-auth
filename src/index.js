@@ -43,7 +43,7 @@ export function childEnvironment() {
 
 // This adapter uses the host's provider catalog, wire protocol, history replay,
 // tool-call conversion, image projection, cancellation and attribution headers.
-export function createCodexAdapter(ctx, config = {}, sourceOverride, beforeAuth = async () => {}, getCatalog) {
+export function createCodexAdapter(ctx, config = {}, sourceOverride, beforeAuth = async () => {}, getCatalog, getPendingModels) {
   const source = sourceOverride ?? new CodexTokenSource({ ...config, childEnvironment });
   const native = openaiCodexProvider();
   const models = supplementCodexModels(native.getModels()).map(model => ({ ...model, provider: PROVIDER }));
@@ -61,11 +61,13 @@ export function createCodexAdapter(ctx, config = {}, sourceOverride, beforeAuth 
       },
     } },
   };
-  let previousModels, profiles;
+  let previousModels, previousPending, profiles;
   const currentProfiles = () => {
     const catalog = getCatalog?.() ?? models;
-    if (catalog === previousModels) return profiles;
+    const pending = getPendingModels?.();
+    if (catalog === previousModels && pending === previousPending) return profiles;
     previousModels = catalog;
+    previousPending = pending;
     // Freeze each collection's catalog so a refresh cannot change a prepared
     // request's model metadata while that request is running.
     const provider = { ...providerBase, getModels: () => catalog };
@@ -80,7 +82,7 @@ export function createCodexAdapter(ctx, config = {}, sourceOverride, beforeAuth 
       requestImageMaxBytes: 1048576,
       retryPolicy: resolveRetryPolicy({ mode: 'normal', maxRetries: 2 }, name),
       configuredMaxTokens: new Map(),
-      modelErrors: new Map(),
+      modelErrors: new Map(pending?.map(({ id }) => [id, '限额待同步。请在 OpenAI / Codex 设置中刷新模型，或先选择其他模型。'])),
     }]]);
     return profiles;
   };
@@ -146,7 +148,7 @@ export async function apply(ctx, config) {
   registration = ctx.llm.registerAdapter([PROVIDER], createCodexAdapter(ctx, config, source, async () => {
     if (!enabled()) throw new LlmError('Codex 连接已停用，请在设置 → OpenAI / Codex 中启用。', 'CODEX_CONNECTION_DISABLED');
     await bridge.ensure();
-  }, () => modelSync.models));
+  }, () => modelSync.models, () => modelSync.pendingModels));
   ctx.on('loader/volatile-update', () => registration?.replace?.([PROVIDER]));
   const quotaSync = new QuotaSync({ enabled,
     readIdentity: async () => accountKey((await source.read()).account.id),
