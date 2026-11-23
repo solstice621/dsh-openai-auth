@@ -23,7 +23,7 @@ async function mount(rpc) {
     clearInterval(id) { timers.delete(id); }, addEventListener() {}, removeEventListener() {},
   };
   new Script(await readFile(new URL('../src/client.js', import.meta.url), 'utf8')).runInNewContext({ window });
-  factory(() => React).apply({ effect() {}, slots: { inject(_name, setup) { setup(); }, register(_options, component) { page = component; } } });
+  factory(() => React).apply({ inject() {}, effect() {}, slots: { inject(_name, setup) { setup(); }, register(_options, component) { page = component; } } });
   const render = () => { cursor = 0; page({ rpc, form: { subscribe() {}, getSnapshot: () => ({ value: { enabled: true } }) } }); for (const effect of queued.splice(0)) effect(); };
   const flush = () => new Promise(resolve => setImmediate(resolve));
   render(); await flush(); render(); await flush();
