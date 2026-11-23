@@ -1,5 +1,27 @@
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import { CodexAuthError } from './codex-auth.js';
+import { readContextWindows } from './model-catalog.js';
+
+const codexModelConfig = ['-c', 'model_provider="openai"', '-c', 'cli_auth_credentials_store="file"'];
+const execFileAsync = promisify(execFile);
+
+export async function readCodexModelWindows({ codexHome, codexCommand, env, signal, run = execFileAsync }) {
+  const options = {
+    env: { ...env, CODEX_HOME: codexHome }, signal, timeout: 15000, maxBuffer: 8 * 1024 * 1024, windowsHide: true,
+  };
+  const read = async flags => {
+    const { stdout } = await run(codexCommand, ['debug', 'models', ...codexModelConfig, ...flags], options);
+    return readContextWindows(JSON.parse(stdout));
+  };
+  // The active command can exit successfully with a bundled fallback. If its
+  // windows match the bundle, let prior account-specific values take precedence.
+  const [windows, bundled] = await Promise.all([read([]), read(['--bundled'])]);
+  const matchesBundle = windows.size === bundled.size
+    && [...windows].every(([id, window]) => bundled.get(id) === window);
+  return { windows, matchesBundle };
+}
+
 
 // Official account and model RPC only. Raw provider output never reaches the UI.
 export class CodexAppServer {
@@ -9,7 +31,7 @@ export class CodexAppServer {
     this.timeoutMs = timeoutMs;
     this.onNotification = onNotification;
     try {
-      this.child = spawnProcess(codexCommand, ['app-server', '--listen', 'stdio://', '-c', 'model_provider="openai"', '-c', 'cli_auth_credentials_store="file"'], {
+      this.child = spawnProcess(codexCommand, ['app-server', '--listen', 'stdio://', ...codexModelConfig], {
         env: { ...env, CODEX_HOME: codexHome }, stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true,
       });
     } catch {

@@ -48,7 +48,8 @@ window.__ModuleLoader__.load({
       const savedIds = formState.value?.selectedModelIds ?? null;
       const ids = pendingIds === undefined ? savedIds : pendingIds;
       const selected = ids === null ? null : new Set(ids);
-      const count = models.filter(model => selected === null || selected.has(model.id)).length;
+      const readyModels = models.filter(model => !model.limitsPending);
+      const count = readyModels.filter(model => selected === null || selected.has(model.id)).length;
       const needle = query.trim().toLowerCase();
       const matches = models.filter(model => (model.name + ' ' + model.id).toLowerCase().includes(needle));
       const locked = saving || !formState.writable || !models.length;
@@ -69,26 +70,28 @@ window.__ModuleLoader__.load({
         }
       }
       function toggle(id, checked) {
-        const next = new Set(ids ?? models.map(model => model.id));
+        const next = new Set(ids ?? readyModels.map(model => model.id));
         if (checked) next.add(id); else next.delete(id);
         save([...next]);
       }
 
       return h('div', { className: 'card', 'aria-busy': saving },
-        h('div', { className: 'row' }, h('h3', null, '模型显示'), h('span', { className: 'small muted', role: 'status' }, '已选 ' + count + ' / ' + models.length + ' 个模型')),
-        h('p', { className: 'small muted', style: { marginTop: 12 } }, '勾选后自动保存；会话模型列表只显示选中的模型。'),
-        h('p', { className: 'small muted' }, ids === null ? '默认显示全部模型，包括之后同步到的新模型。' : '之后同步到的新模型需手动勾选。'),
+        h('div', { className: 'row' }, h('h3', null, '模型显示'), h('span', { className: 'small muted', role: 'status' }, '已选 ' + count + ' / ' + readyModels.length + ' 个可用模型')),
+        h('p', { className: 'small muted', style: { marginTop: 12 } }, '会话中可选用已勾选且限额已确认的模型。'),
+        h('p', { className: 'small muted' }, ids === null ? '默认显示全部可用模型，包括之后同步到的新模型。' : '之后同步到的新模型需手动勾选。'),
         h('div', { className: 'buttons' },
-          h('button', { type: 'button', disabled: locked, onClick: () => save([...new Set([...(ids ?? []), ...models.map(model => model.id)])]) }, '全选'),
-          h('button', { type: 'button', disabled: locked || count === 0, onClick: () => save([]) }, '全不选'),
+          h('button', { type: 'button', disabled: locked || !readyModels.length, onClick: () => save([...new Set([...(ids ?? []), ...readyModels.map(model => model.id)])]) }, '全选'),
+          h('button', { type: 'button', disabled: locked || ids?.length === 0, onClick: () => save([]) }, '全不选'),
           h('button', { type: 'button', disabled: locked || ids === null, onClick: () => save(null) }, '恢复默认')),
         h('input', { type: 'search', className: 'model-search', placeholder: '搜索模型名称或 ID…', 'aria-label': '搜索可显示的模型', value: query, onChange: event => setQuery(event.target.value) }),
         h('div', { className: 'model-list', role: 'group', 'aria-label': '会话中显示的模型' },
           matches.map(model => h('label', { className: 'model-option', key: model.id },
-            h('input', { type: 'checkbox', checked: selected === null || selected.has(model.id), disabled: locked, onChange: event => toggle(model.id, event.target.checked) }),
-            h('span', { className: 'model-label' }, h('span', null, model.name), h('span', { className: 'small muted model-id' }, model.id)))),
+            h('input', { type: 'checkbox', checked: selected?.has(model.id) ?? !model.limitsPending, disabled: locked || Boolean(model.limitsPending), onChange: event => toggle(model.id, event.target.checked) }),
+            h('span', { className: 'model-label' }, h('span', null, model.name),
+              h('span', { className: 'small muted model-id' }, model.id),
+              model.limitsPending && h('span', { className: 'small muted' }, '限额待同步')))),
           !matches.length && h('p', { className: 'small muted' }, models.length ? '没有匹配的模型。' : '正在读取模型目录…')),
-        ids !== null && count === 0 && models.length > 0 && h('p', { className: 'small muted' }, '已隐藏此插件的全部模型，可随时重新勾选。'),
+        ids !== null && count === 0 && readyModels.length > 0 && h('p', { className: 'small muted' }, '已隐藏当前可用的全部模型，可随时重新勾选。'),
         !formState.writable && h('p', { className: 'small muted' }, '当前设置暂不可写，请稍后重试。'),
         saving && h('p', { className: 'small muted', role: 'status' }, '正在保存模型选择…'),
         message && h('p', { className: 'small muted', role: 'status' }, message),
@@ -209,7 +212,7 @@ window.__ModuleLoader__.load({
         try {
           const value = await call(method); accept(value);
           if (method === 'refresh') setNotice('授权已刷新。');
-          if (method === 'models') setNotice(`模型目录已同步，共 ${value.models?.totalModels ?? 0} 个模型。`);
+          if (method === 'models') setNotice(`模型列表已同步，${value.models?.totalModels ?? 0} 个可用${value.models?.pendingCount ? `，${value.models.pendingCount} 个限额待同步` : ''}。`);
           if (method === 'cancel') setNotice('已取消本次登录。');
           if (method === 'login' && value.attempt?.authUrl) window.open(value.attempt.authUrl, '_blank', 'noopener,noreferrer');
         } catch (err) { setError(errors[err.code] ?? '操作未完成，请检查网络后重试。'); }
@@ -267,6 +270,8 @@ window.__ModuleLoader__.load({
           h('p', { className: 'muted small', style: { marginTop: 14 } }, !enabled ? '连接已停用，自动同步已暂停。' : `启动时同步，每 ${state?.models?.intervalMinutes ?? 360} 分钟自动刷新；账号变化后重新同步。`),
           state?.models && h('p', { className: 'small muted', style: { marginTop: 8 } }, `当前 ${state.models.totalModels} 个模型 · ${state.models.source === 'codex' ? '官方 Codex 目录' : state.models.source === 'cache' ? '最近成功的缓存' : '内置备用目录'} · 最近同步：${date(state.models.lastSyncAt)}`),
           state?.models?.error && h('p', { className: 'small muted' }, errors[state.models.error] ?? '同步未完成，当前模型目录仍可使用。'),
+          state?.models?.contextReadFailed && h('p', { className: 'small muted' }, '上下文限额刷新失败，已保留可用限额。可点击「刷新模型」重试。'),
+          Boolean(state?.models?.pendingCount) && h('p', { className: 'small muted' }, `${state.models.pendingCount} 个模型限额待同步，确认后可在会话中选用。`),
           state?.models?.cacheSaved === false && h('p', { className: 'small muted' }, '模型目录已更新，但缓存未保存；重启后会重新同步。'),
           h('p', { className: 'small muted', style: { marginTop: 8 } }, '目录取决于 Codex 客户端和账号。新模型沿用当前 Responses 协议；新协议仍需升级插件。')),
         h(ModelSelection, { models: state?.models?.availableModels, form, formState }),
