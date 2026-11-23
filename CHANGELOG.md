@@ -1,7 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.3.3
 
+- Synchronize Codex context windows by model ID and keep models with unresolved limits pending until synchronization succeeds.
+- Keep the Codex quota control visible in the conversation composer with both the native and Claude-style layouts, with account quota details and a refresh action.
+- Require DeepSeek Harness 0.2.2-rc.2 or newer.
 - Remove host SDK version allowlists while retaining all peer dependencies.
 - Check required host service APIs before starting proxy, account, quota, or model-sync work.
 - Keep tested environments documented separately from activation requirements.

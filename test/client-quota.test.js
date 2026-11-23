@@ -59,3 +59,53 @@ test('a cache polling error retains the current quota and unmount ignores late r
   const polling = ui.poll(); await ui.flush(); ui.dispose(); resolveCache(snapshot(400)); await polling;
   assert.equal(ui.quota().fetchedAt, 200); assert.equal(ui.timerCount(), 0);
 });
+
+test('the composer quota ships with its slot and model-directory client dependencies', async () => {
+  const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  const client = await readFile(new URL('../src/client.js', import.meta.url), 'utf8');
+  assert(manifest.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-conversation'));
+  assert(manifest.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-model-selection'));
+
+  let factory, composer, options, selected = 'codex-subscription';
+  const window = { __ModuleLoader__: { load(value) { factory = value.factory; } } };
+  new Script(client).runInNewContext({ window });
+  const react = {
+    Fragment: Symbol('fragment'),
+    createElement: (type, props, ...children) => ({ type, props, children }),
+    useSyncExternalStore: (_, snapshot) => snapshot(),
+    useState: value => [value, () => {}],
+  };
+  const slots = {
+    inject(_name, register) { register(); },
+    register(config, component) {
+      if (config.name === 'conversation.composer.dock') { options = config; composer = component; }
+    },
+  };
+  const scope = {
+    effect() {}, slots,
+    modelDirectories: { directoryFor(sessionId) {
+      assert.equal(sessionId, 'test-session');
+      return { store: {
+        subscribe() {},
+        getSnapshot: () => ({ current: { provider: selected } }),
+      } };
+    } },
+  };
+  factory(name => name === 'react' ? react : { createPortal() {} }).apply({
+    effect() {}, slots,
+    inject(keys, activate) {
+      assert(keys.includes('modelDirectories'));
+      activate(scope);
+    },
+  });
+  const props = options.inject('test-session');
+  const pill = composer(props);
+  assert.equal(pill.props.source.label, 'Codex');
+  const button = pill.type(pill.props).children[0];
+  assert.equal(button.type, 'button');
+  assert.equal(button.props['data-auth-plan-usage'], 'dsh-openai-auth');
+  // Composer themes may replace the native statistics while leaving actions visible.
+  assert.equal(Object.hasOwn(button.props, 'data-composer-stat'), false);
+  selected = 'other-provider';
+  assert.equal(composer(props), null);
+});
